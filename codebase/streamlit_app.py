@@ -7,8 +7,15 @@ try:
         default_summary,
         local_transcripts,
         masked_key_label,
+        parse_api_keys,
         segment_map,
         summarize_with_key_rotation,
+    )
+    from codebase.key_vault import (
+        KeyVaultError,
+        clear_key_pool,
+        load_key_pool,
+        save_key_pool,
     )
     from codebase.mongo_repository import (
         MongoTranscriptRepository,
@@ -25,8 +32,15 @@ except ModuleNotFoundError:
         default_summary,
         local_transcripts,
         masked_key_label,
+        parse_api_keys,
         segment_map,
         summarize_with_key_rotation,
+    )
+    from key_vault import (
+        KeyVaultError,
+        clear_key_pool,
+        load_key_pool,
+        save_key_pool,
     )
     from mongo_repository import (
         MongoTranscriptRepository,
@@ -142,12 +156,21 @@ if not files:
 
 labels = {transcript.name: transcript.title for transcript in files}
 
+try:
+    persisted_api_keys = load_key_pool()
+    initial_vault_error = None
+except KeyVaultError as exc:
+    persisted_api_keys = []
+    initial_vault_error = str(exc)
+
 st.session_state.setdefault("messages", [])
 st.session_state.setdefault("summary_cache", {})
 st.session_state.setdefault("ai_generated_sessions", set())
-st.session_state.setdefault("gemini_api_keys_raw", "")
+st.session_state.setdefault("gemini_api_keys_raw", "\n".join(persisted_api_keys))
 st.session_state.setdefault("gemini_key_cursor", 0)
 st.session_state.setdefault("last_key_slot", None)
+st.session_state.setdefault("key_vault_saved_count", len(persisted_api_keys))
+st.session_state.setdefault("key_vault_error", initial_vault_error)
 st.session_state.setdefault("point_selector", 0)
 st.session_state.setdefault("active_view", "Tổng quan")
 
@@ -166,6 +189,31 @@ def reset_key_pool() -> None:
     st.session_state.gemini_key_cursor = 0
     st.session_state.last_key_slot = None
     st.session_state.ai_generated_sessions = set()
+
+
+def persist_manual_key_pool() -> None:
+    reset_key_pool()
+    keys = parse_api_keys(st.session_state.get("gemini_api_keys_raw", ""))
+    try:
+        if keys:
+            save_key_pool(keys)
+        else:
+            clear_key_pool()
+        st.session_state.key_vault_saved_count = len(keys)
+        st.session_state.key_vault_error = None
+    except KeyVaultError as exc:
+        st.session_state.key_vault_error = str(exc)
+
+
+def clear_persisted_key_pool() -> None:
+    try:
+        clear_key_pool()
+        st.session_state.gemini_api_keys_raw = ""
+        st.session_state.key_vault_saved_count = 0
+        st.session_state.key_vault_error = None
+        reset_key_pool()
+    except KeyVaultError as exc:
+        st.session_state.key_vault_error = str(exc)
 
 
 with st.sidebar:
@@ -224,7 +272,7 @@ with st.sidebar:
         key="gemini_api_keys_raw",
         placeholder="gemini-key-1\ngemini-key-2\ngemini-key-3",
         help="Nhấn Enter để xuống dòng. Mỗi dòng tạo một slot trong pool.",
-        on_change=reset_key_pool,
+        on_change=persist_manual_key_pool,
     )
     st.caption(
         "Mỗi dòng đúng một key · tự bỏ dòng trống, comment bắt đầu bằng # và key trùng."
@@ -236,6 +284,16 @@ with st.sidebar:
         if part
     )
     api_keys = configured_api_keys(combined_key_input)
+    manual_api_keys = parse_api_keys(st.session_state.gemini_api_keys_raw)
+    keys_to_persist = api_keys if uploaded_key_text else manual_api_keys
+    if keys_to_persist:
+        try:
+            save_key_pool(keys_to_persist)
+            st.session_state.key_vault_saved_count = len(keys_to_persist)
+            st.session_state.key_vault_error = None
+        except KeyVaultError as exc:
+            st.session_state.key_vault_error = str(exc)
+
     if api_keys:
         st.success(f"{len(api_keys)} key sẵn sàng", icon=":material/key:")
         cursor = st.session_state.gemini_key_cursor % len(api_keys)
@@ -247,8 +305,21 @@ with st.sidebar:
             st.caption(f"… và {len(api_keys) - 6} key khác")
         if st.session_state.last_key_slot is not None:
             st.caption(f"Request gần nhất dùng slot {st.session_state.last_key_slot + 1}")
+        if st.session_state.key_vault_saved_count:
+            st.caption(
+                f":material/lock: Đã mã hóa {st.session_state.key_vault_saved_count} key "
+                "trên máy này · tải lại trang không bị mất"
+            )
+            st.button(
+                "Xóa key đã lưu",
+                icon=":material/delete:",
+                on_click=clear_persisted_key_pool,
+                help="Xóa bản mã hóa cục bộ và làm trống vùng nhập trực tiếp.",
+            )
     else:
         st.info("Chưa có key · đang chạy demo", icon=":material/science:")
+    if st.session_state.key_vault_error:
+        st.warning(st.session_state.key_vault_error, icon=":material/lock_open:")
     st.markdown("**Nguyên tắc an toàn**")
     st.caption(
         "Round-robin sau mỗi request · tự chuyển khi hết quota · "
@@ -304,29 +375,10 @@ cache_key = path.name
 if cache_key not in st.session_state.summary_cache:
     st.session_state.summary_cache[cache_key] = default_summary(path)
 
-if api_keys and cache_key not in st.session_state.ai_generated_sessions:
-    try:
-        with st.spinner("Đang đọc transcript và đối chiếu quiz…"):
-            rotation = summarize_with_key_rotation(
-                path,
-                quiz_questions,
-                api_keys,
-                st.session_state.gemini_key_cursor,
-            )
-            st.session_state.summary_cache[cache_key] = rotation.value
-            st.session_state.gemini_key_cursor = rotation.next_cursor
-            st.session_state.last_key_slot = rotation.used_slot
-        st.session_state.ai_generated_sessions.add(cache_key)
-        st.toast(
-            f"Đã phân tích bằng key slot {rotation.used_slot + 1}.",
-            icon=":material/check_circle:",
-        )
-    except Exception as exc:
-        st.warning(f"Chưa thể gọi Gemini. Đang dùng dữ liệu demo. {exc}")
-
 summary = st.session_state.summary_cache[cache_key]
 quiz_count = sum(bool(point.get("quiz")) for point in summary)
 
+analyze_requested = False
 with st.container(horizontal=True, vertical_alignment="center", key="modebar"):
     view = st.segmented_control(
         "Khu vực",
@@ -336,23 +388,48 @@ with st.container(horizontal=True, vertical_alignment="center", key="modebar"):
     )
     st.space("stretch")
     st.caption(f"{len(summary)} trọng điểm · {quiz_count} liên quan quiz · {len(segments)} đoạn transcript")
-    if api_keys and st.button(
-        "Làm mới", icon=":material/refresh:", help="Phân tích lại bằng Gemini"
-    ):
-        try:
-            with st.spinner("Đang phân tích lại…"):
-                rotation = summarize_with_key_rotation(
-                    path,
-                    quiz_questions,
-                    api_keys,
-                    st.session_state.gemini_key_cursor,
+    if api_keys:
+        already_analyzed = cache_key in st.session_state.ai_generated_sessions
+        analyze_requested = st.button(
+            "Phân tích lại" if already_analyzed else "Phân tích bằng Gemini",
+            icon=":material/refresh:" if already_analyzed else ":material/auto_awesome:",
+            help="Chỉ bắt đầu gọi Gemini khi bạn bấm nút này.",
+            type="secondary" if already_analyzed else "primary",
+        )
+
+if analyze_requested:
+    try:
+        with st.status("Đang phân tích bằng Gemini…", expanded=True) as analysis_status:
+            attempt_progress = st.progress(0, text="Đang chuẩn bị request…")
+
+            def show_key_attempt(attempt: int, total: int, slot: int) -> None:
+                attempt_progress.progress(
+                    attempt / total,
+                    text=(
+                        f"Đang thử slot {slot + 1} · lượt {attempt}/{total} · "
+                        "mỗi lượt có timeout bảo vệ"
+                    ),
                 )
-                st.session_state.summary_cache[cache_key] = rotation.value
-                st.session_state.gemini_key_cursor = rotation.next_cursor
-                st.session_state.last_key_slot = rotation.used_slot
-            st.rerun()
-        except Exception as exc:
-            st.error(f"Không thể gọi Gemini: {exc}")
+
+            rotation = summarize_with_key_rotation(
+                path,
+                quiz_questions,
+                api_keys,
+                st.session_state.gemini_key_cursor,
+                on_attempt=show_key_attempt,
+            )
+            st.session_state.summary_cache[cache_key] = rotation.value
+            st.session_state.gemini_key_cursor = rotation.next_cursor
+            st.session_state.last_key_slot = rotation.used_slot
+            st.session_state.ai_generated_sessions.add(cache_key)
+            analysis_status.update(
+                label=f"Hoàn tất bằng key slot {rotation.used_slot + 1}",
+                state="complete",
+                expanded=False,
+            )
+        st.rerun()
+    except Exception as exc:
+        st.error(f"Không thể gọi Gemini: {exc}")
 
 if view == "Tổng quan":
     main_col, quiz_col = st.columns([1.35, 1], gap="large")

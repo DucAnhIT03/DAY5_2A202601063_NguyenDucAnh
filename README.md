@@ -38,9 +38,9 @@ key-2
 key-3
 ```
 
-Ứng dụng chỉ đọc file trong RAM, giới hạn 256 KB và không ghi nội dung key vào repo/log. Có thể dán trực tiếp hàng loạt vào vùng nhập nhiều dòng bên dưới file uploader; **mỗi dòng là một API key**. Bật **Che key trên màn hình** khi trình chiếu.
+Ứng dụng giới hạn đầu vào 256 KB và không ghi key vào repo/log. Có thể dán trực tiếp hàng loạt vào vùng nhập nhiều dòng bên dưới file uploader; **mỗi dòng là một API key**. Bật **Che key trên màn hình** khi trình chiếu. Pool được mã hóa cục bộ bằng Windows DPAPI trong thư mục `.runtime/` đã gitignore, chỉ tài khoản Windows hiện tại giải mã được; vì vậy tải lại trang hoặc khởi động lại Streamlit không làm mất key. Có nút **Xóa key đã lưu** để xóa ngay bản mã hóa.
 
-Pool sử dụng round-robin sau mỗi request. Nếu một key gặp lỗi quota token/rate-limit (`429`/`RESOURCE_EXHAUSTED`), key lỗi hoặc provider `5xx`, hệ thống tự chạy lại toàn bộ request bằng slot tiếp theo. Lời gọi Gemini là non-streaming nên output dở dang không được đưa ra UI; người dùng chỉ thấy kết quả hoàn chỉnh. Lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
+Pool sử dụng round-robin sau mỗi request. Việc dán/nạp key **không tự gọi AI**; bấm **Phân tích bằng Gemini** khi muốn chạy. Trong lúc chạy, giao diện hiển thị slot và tiến độ thử key. Nếu một key gặp lỗi quota token/rate-limit (`429`/`RESOURCE_EXHAUSTED`), key lỗi hoặc provider `5xx`, hệ thống tự chạy lại toàn bộ request bằng slot tiếp theo; mỗi request có timeout để không chờ vô hạn. Lời gọi Gemini là non-streaming nên output dở dang không được đưa ra UI; người dùng chỉ thấy kết quả hoàn chỉnh. Lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
 
 Bạn cũng có thể cấu hình key bằng biến môi trường:
 

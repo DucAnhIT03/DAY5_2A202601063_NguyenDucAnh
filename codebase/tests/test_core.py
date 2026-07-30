@@ -1,6 +1,8 @@
 import pickle
 from pathlib import Path
 
+import pytest
+
 from codebase import core
 from codebase.core import (
     answer_question,
@@ -98,6 +100,7 @@ def test_key_rotation_fails_over_and_advances_cursor(monkeypatch):
         code = 429
 
     calls = []
+    attempts = []
 
     def fake_summary(path, quiz_questions, api_key):
         calls.append(api_key)
@@ -107,12 +110,34 @@ def test_key_rotation_fails_over_and_advances_cursor(monkeypatch):
 
     monkeypatch.setattr(core, "summarize_with_gemini", fake_summary)
     rotated = summarize_with_key_rotation(
-        TRANSCRIPT, [], ["quota-key", "working-key", "third-key"], cursor=0
+        TRANSCRIPT,
+        [],
+        ["quota-key", "working-key", "third-key"],
+        cursor=0,
+        on_attempt=lambda attempt, total, slot: attempts.append((attempt, total, slot)),
     )
     assert calls == ["quota-key", "working-key"]
+    assert attempts == [(1, 3, 0), (2, 3, 1)]
     assert rotated.used_slot == 1
     assert rotated.next_cursor == 2
     assert rotated.attempts == 2
+
+
+def test_key_rotation_stops_on_local_response_validation_error(monkeypatch):
+    calls = []
+
+    def malformed_summary(path, quiz_questions, api_key):
+        calls.append(api_key)
+        raise ValueError("malformed JSON")
+
+    monkeypatch.setattr(core, "summarize_with_gemini", malformed_summary)
+    with pytest.raises(core.KeyPoolError):
+        summarize_with_key_rotation(
+            TRANSCRIPT,
+            [],
+            ["first-key", "second-key", "third-key"],
+        )
+    assert calls == ["first-key"]
 
 
 def test_guardrail_does_not_consume_key_slot():

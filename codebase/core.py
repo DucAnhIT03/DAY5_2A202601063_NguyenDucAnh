@@ -49,6 +49,9 @@ class KeyPoolError(RuntimeError):
     """Safe error that never includes an API key or raw provider response."""
 
 
+AttemptCallback: TypeAlias = Callable[[int, int, int], None]
+
+
 DEMO_SUMMARIES: dict[str, list[dict[str, Any]]] = {
     "transcript-04-clean.md": [
         {
@@ -186,6 +189,9 @@ def masked_key_label(key: str) -> str:
 
 
 def _is_retryable_provider_error(error: Exception) -> bool:
+    if isinstance(error, (json.JSONDecodeError, ValueError, TypeError, KeyError)):
+        # Changing API keys cannot repair a malformed/invalid model response.
+        return False
     status = getattr(error, "status_code", None) or getattr(error, "code", None)
     try:
         status_number = int(status) if status is not None else None
@@ -200,6 +206,7 @@ def _run_with_rotation(
     operation: Callable[[str], Any],
     api_keys: list[str],
     cursor: int = 0,
+    on_attempt: AttemptCallback | None = None,
 ) -> RotationResult:
     if not api_keys:
         raise KeyPoolError("Chưa có Gemini API key khả dụng.")
@@ -207,6 +214,8 @@ def _run_with_rotation(
     start = cursor % len(api_keys)
     for offset in range(len(api_keys)):
         slot = (start + offset) % len(api_keys)
+        if on_attempt is not None:
+            on_attempt(offset + 1, len(api_keys), slot)
         try:
             value = operation(api_keys[slot])
             return RotationResult(
@@ -231,13 +240,28 @@ def _extract_json(text: str) -> Any:
     return json.loads(payload.strip())
 
 
+def _gemini_timeout_ms() -> int:
+    try:
+        configured = int(os.getenv("GEMINI_REQUEST_TIMEOUT_MS", "45000"))
+    except ValueError:
+        configured = 45_000
+    return min(max(configured, 5_000), 120_000)
+
+
+def _gemini_client(api_key: str | None):
+    from google import genai
+
+    return genai.Client(
+        api_key=_api_key(api_key),
+        http_options={"timeout": _gemini_timeout_ms()},
+    )
+
+
 def summarize_with_gemini(
     source: TranscriptSource,
     quiz_questions: list[str],
     api_key: str | None = None,
 ) -> list[dict[str, Any]]:
-    from google import genai
-
     segments = load_segments(source)
     context = "\n".join(f"[{s.id}] {s.text}" for s in segments)
     prompt = f"""Bạn là Catch-up Assistant. Chỉ dùng transcript bên dưới.
@@ -253,7 +277,7 @@ QUIZ CŨ:
 TRANSCRIPT:
 {context}
 """
-    client = genai.Client(api_key=_api_key(api_key))
+    client = _gemini_client(api_key)
     response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
     result = _extract_json(response.text)
     valid_ids = {s.id for s in segments}
@@ -308,15 +332,13 @@ def answer_question(
             "mode": "demo",
         }
 
-    from google import genai
-
     context = "\n".join(f"[{s.id}] {s.text}" for s in relevant)
     prompt = f"""Chỉ trả lời từ CONTEXT. Nếu không đủ căn cứ, trả đúng chuỗi KHONG_DU_CAN_CU.
 Trả JSON: {{"answer":"...", "citations":["Txx-NNN"]}}. Không dùng kiến thức ngoài.
 CÂU HỎI: {question}
 CONTEXT:
 {context}"""
-    client = genai.Client(api_key=_api_key(api_key))
+    client = _gemini_client(api_key)
     response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
     data = _extract_json(response.text)
     if data.get("answer") == "KHONG_DU_CAN_CU":
@@ -334,11 +356,13 @@ def summarize_with_key_rotation(
     quiz_questions: list[str],
     api_keys: list[str],
     cursor: int = 0,
+    on_attempt: AttemptCallback | None = None,
 ) -> RotationResult:
     return _run_with_rotation(
         lambda key: summarize_with_gemini(source, quiz_questions, key),
         api_keys,
         cursor,
+        on_attempt,
     )
 
 
@@ -347,6 +371,7 @@ def answer_with_key_rotation(
     question: str,
     api_keys: list[str],
     cursor: int = 0,
+    on_attempt: AttemptCallback | None = None,
 ) -> RotationResult:
     if not api_keys:
         return RotationResult(
@@ -360,6 +385,7 @@ def answer_with_key_rotation(
         lambda key: answer_question(source, question, key),
         api_keys,
         cursor,
+        on_attempt,
     )
     # Guardrail questions never call Gemini, so do not consume a key slot.
     if result.value.get("mode") == "guardrail":
