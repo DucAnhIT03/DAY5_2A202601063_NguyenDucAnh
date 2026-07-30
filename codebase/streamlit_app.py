@@ -100,6 +100,10 @@ st.html(
         border-radius:18px; padding:.8rem 1rem 1rem;
         box-shadow:0 6px 22px rgba(30,41,59,.045);
     }
+    .st-key-chat_history_scroll {
+        max-height:420px; overflow-y:auto; overscroll-behavior:contain;
+        padding-right:.45rem; scrollbar-gutter:stable;
+    }
     .st-key-overview_main, .st-key-quiz_panel, .st-key-transcript_panel {
         background:#FFFFFF; border:1px solid #E6E8F0 !important;
         border-radius:18px; padding:.75rem 1rem;
@@ -780,20 +784,26 @@ else:
         else:
             suggestion = None
 
-        for message in st.session_state.messages:
-            with st.chat_message(
-                message["role"],
-                avatar=":material/smart_toy:"
-                if message["role"] == "assistant"
-                else ":material/person:",
-            ):
-                st.write(message["content"])
-                if message.get("citations"):
-                    st.caption("Nguồn: " + ", ".join(f"[{c}]" for c in message["citations"]))
-                if message.get("mode") == "ai":
-                    st.caption(
-                        f":material/auto_awesome: Gemini · key slot {message['slot'] + 1}"
-                    )
+        if st.session_state.messages:
+            with st.container(key="chat_history_scroll"):
+                for message in st.session_state.messages:
+                    with st.chat_message(
+                        message["role"],
+                        avatar=":material/smart_toy:"
+                        if message["role"] == "assistant"
+                        else ":material/person:",
+                    ):
+                        st.write(message["content"])
+                        if message.get("citations"):
+                            st.caption(
+                                "Nguồn: "
+                                + ", ".join(f"[{c}]" for c in message["citations"])
+                            )
+                        if message.get("mode") == "ai":
+                            st.caption(
+                                ":material/auto_awesome: Gemini · "
+                                f"key slot {message['slot'] + 1}"
+                            )
 
         typed_question = st.chat_input(
             "Hỏi về nội dung buổi học…",

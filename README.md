@@ -45,7 +45,8 @@ Pool sử dụng round-robin sau mỗi request. Việc dán/nạp key **không t
 Tab **Hỏi trợ lý** dùng chat input native: lời chào/cảm ơn được phản hồi ngay mà
 không tiêu key; câu hỏi tổng quan như “Tóm tắt buổi học này” và câu hỏi khái niệm
 được Gemini trả lời từ transcript đang mở, kèm citation thật. Nếu provider lỗi, UI
-hiển thị thông báo an toàn trong hội thoại thay vì làm hỏng toàn bộ trang.
+hiển thị thông báo an toàn trong hội thoại thay vì làm hỏng toàn bộ trang. Lịch sử
+chat tự giới hạn ở 420 px và cuộn riêng khi dài; ô nhập luôn nằm ngay bên dưới.
 
 Pipeline trả lời được tối ưu cho độ chính xác và súc tích: tìm đoạn theo từ khoá có
 dấu/không dấu, cụm từ và độ đặc hiệu; bỏ hoạt động lớp khỏi kết quả tìm kiếm; dùng
@@ -61,7 +62,8 @@ thích xuất hiện thành một mini-chat ngay dưới chính đoạn transcri
 ô **Hỏi tiếp về phần này…** cho phép trò chuyện nhiều lượt ngay tại chỗ. Mỗi câu trả
 lời tiếp theo nhận phần đã chọn, lịch sử mini-chat và đúng một đoạn nguồn, rồi giữ lại
 toàn bộ lượt hỏi với citation tương ứng. Nút **Hỏi AI về cả đoạn** là lựa chọn nhanh
-khi không cần chọn một câu cụ thể.
+khi không cần chọn một câu cụ thể. Lịch sử từng mini-chat cũng cuộn độc lập; tiêu đề
+và ô hỏi tiếp vẫn luôn ở ngoài vùng cuộn để người dùng không phải tìm lại thao tác.
 
 Kết quả Gemini chỉ được lưu vào `analyses` sau khi có 3–5 trọng điểm và mọi citation
 đều tồn tại trong đúng transcript. Bản ghi gắn fingerprint SHA-256 của transcript;

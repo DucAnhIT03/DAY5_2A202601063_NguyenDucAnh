@@ -124,6 +124,19 @@ _CSS = """
   gap: .35rem;
   margin: 0;
 }
+.catchup-selection-thread-history {
+  display: grid;
+  gap: .7rem;
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: .05rem .3rem .05rem .05rem;
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+#selection-root.compact .catchup-selection-thread-history {
+  max-height: 120px;
+}
 .catchup-selection-turn {
   display: grid;
   gap: .48rem;
@@ -281,6 +294,13 @@ export default function(component) {
       threadTitle.textContent = "AI · Giải thích ngay tại đoạn này"
       thread.appendChild(threadTitle)
 
+      const history = document.createElement("div")
+      history.className = "catchup-selection-thread-history"
+      history.setAttribute("role", "log")
+      history.setAttribute("aria-live", "polite")
+      history.setAttribute("aria-label", `Lịch sử hỏi đáp tại đoạn ${item.id ?? ""}`)
+      thread.appendChild(history)
+
       for (const turn of turns) {
         const turnElement = document.createElement("div")
         turnElement.className = "catchup-selection-turn"
@@ -304,7 +324,7 @@ export default function(component) {
         meta.textContent = `Nguồn [${source}] · ${provider}${slot}`
 
         turnElement.append(question, answer, meta)
-        thread.appendChild(turnElement)
+        history.appendChild(turnElement)
       }
 
       if (isPending) {
@@ -328,7 +348,7 @@ export default function(component) {
           : "Gemini đang đọc đúng đoạn này và chuẩn bị câu trả lời…"
         pendingStatus.append(spinner, pendingText)
         pendingTurn.append(pendingQuestion, pendingStatus)
-        thread.appendChild(pendingTurn)
+        history.appendChild(pendingTurn)
       }
 
       const anchorTurn = [...turns].reverse().find(turn => turn.selected_text)
@@ -388,7 +408,10 @@ export default function(component) {
       element => element.dataset.segmentId === focusedSegment
     )
     requestAnimationFrame(() => {
-      target?.querySelector(".catchup-selection-thread")?.scrollIntoView({
+      const thread = target?.querySelector(".catchup-selection-thread")
+      const history = thread?.querySelector(".catchup-selection-thread-history")
+      if (history) history.scrollTop = history.scrollHeight
+      thread?.scrollIntoView({
         behavior: "smooth",
         block: "nearest",
       })
