@@ -43,7 +43,15 @@ Nếu chưa có key, app chạy **demo có kiểm soát** và gắn nhãn rõ; �
 
 ## Thành viên & phân công
 
-- **2A202601063 — Nguyễn Đức Anh:** product/spec, evidence mining, prompt, code, eval và demo.
+| Thành viên | Mã học viên | Vai trò & phần phụ trách |
+|---|---|---|
+| **Nguyễn Đức Anh (Trưởng nhóm)** | **2A202601063** | Điều phối nhóm; product/spec; kiến trúc AI; tích hợp Gemini; tổng hợp code và demo |
+| **Phan Văn Hiếu** | **2A202601227** | Mining transcript/chatlog; thu thập evidence; kiểm tra trích dẫn nguồn |
+| **Nguyễn Huy Tỏa** | **2A202601697** | Thiết kế prompt; xây golden set; chạy và tổng hợp kết quả evaluation |
+| **Tạ Long Khánh** | **2A202601197** | Thiết kế UI/UX; kiểm thử luồng sử dụng; hoàn thiện prototype Streamlit |
+| **Vũ Đăng Huy** | **2A202601761** | User validation; feedback log; slide thuyết trình và demo script |
+
+> Phân công là đầu mối chịu trách nhiệm chính. Cả 5 thành viên cùng review spec, thử prototype và tham gia phần trình bày/Q&A.
 
 Các mục cần dữ liệu người thật hoặc API key được đánh dấu `TODO-NGƯỜI-THẬT` / `TODO-AI-KEY`; không có số liệu hay trace giả.
 
