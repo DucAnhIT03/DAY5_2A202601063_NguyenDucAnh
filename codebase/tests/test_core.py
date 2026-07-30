@@ -42,6 +42,16 @@ def test_key_parser_deduplicates_and_masks():
     assert masked_key_label(keys[0]) == "alph••••2345"
 
 
+def test_key_parser_accepts_one_key_per_line_and_comments():
+    raw = """# Gemini pool
+first-key-12345
+
+second-key-67890
+first-key-12345  # duplicate
+"""
+    assert parse_api_keys(raw) == ["first-key-12345", "second-key-67890"]
+
+
 def test_key_rotation_fails_over_and_advances_cursor(monkeypatch):
     class QuotaError(Exception):
         code = 429

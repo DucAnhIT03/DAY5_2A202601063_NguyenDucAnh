@@ -127,17 +127,42 @@ def reset_key_pool() -> None:
 
 with st.sidebar:
     st.markdown("## :material/settings: Cài đặt")
+    st.markdown("**Nạp key hàng loạt**")
+    uploaded_key_file = st.file_uploader(
+        "File Gemini key (.txt)",
+        type=["txt"],
+        key="gemini_key_file",
+        on_change=reset_key_pool,
+        help="Mỗi dòng chứa đúng một API key. File chỉ được đọc trong RAM.",
+    )
+    uploaded_key_text = ""
+    if uploaded_key_file is not None:
+        if uploaded_key_file.size > 256 * 1024:
+            st.error("File key vượt quá giới hạn 256 KB.")
+        else:
+            try:
+                uploaded_key_text = uploaded_key_file.getvalue().decode("utf-8-sig")
+            except UnicodeDecodeError:
+                st.error("File key phải sử dụng mã hoá UTF-8.")
+
     st.text_input(
-        "Gemini API key pool",
+        "Key bổ sung (tuỳ chọn)",
         type="password",
         key="gemini_api_keys_raw",
-        placeholder="key-1, key-2, key-3…",
-        help="Phân tách nhiều key bằng dấu phẩy, chấm phẩy hoặc khoảng trắng.",
+        placeholder="Dán thêm key, ngăn cách bằng dấu phẩy…",
+        help="Dùng khi muốn bổ sung key mà không sửa file .txt.",
         on_change=reset_key_pool,
     )
-    st.caption("Key chỉ nằm trong phiên trình duyệt, không được ghi vào file hoặc log.")
+    st.caption(
+        "Định dạng file: mỗi dòng một key. Dòng trống và dòng bắt đầu bằng # được bỏ qua."
+    )
 
-    api_keys = configured_api_keys(st.session_state.gemini_api_keys_raw)
+    combined_key_input = "\n".join(
+        part
+        for part in (uploaded_key_text, st.session_state.gemini_api_keys_raw)
+        if part
+    )
+    api_keys = configured_api_keys(combined_key_input)
     if api_keys:
         st.success(f"{len(api_keys)} key sẵn sàng", icon=":material/key:")
         cursor = st.session_state.gemini_key_cursor % len(api_keys)
@@ -157,7 +182,7 @@ with st.sidebar:
         "chỉ dùng transcript đang mở · không đủ căn cứ thì từ chối."
     )
 
-api_keys = configured_api_keys(st.session_state.gemini_api_keys_raw)
+api_keys = configured_api_keys(combined_key_input)
 
 with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
     st.markdown("### :material/school: VLearn · Catch-up")

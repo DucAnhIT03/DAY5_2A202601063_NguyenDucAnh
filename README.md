@@ -12,9 +12,18 @@ python -m venv .venv
 .\.venv\Scripts\streamlit.exe run codebase\streamlit_app.py
 ```
 
-Mở `http://localhost:8501`. Trong sidebar, nhập một hoặc nhiều key vào **Gemini API key pool**. Phân tách key bằng dấu phẩy, chấm phẩy hoặc khoảng trắng. Key chỉ được giữ trong phiên trình duyệt, không ghi vào file.
+Mở `http://localhost:8501`. Trong sidebar, tải lên file `.txt` tại **Nạp key hàng loạt**. Mỗi dòng chứa đúng một Gemini API key; dòng trống và comment bắt đầu bằng `#` được bỏ qua:
 
-Pool sử dụng round-robin sau mỗi request. Nếu một key gặp lỗi quota/rate-limit/key/provider, hệ thống tự thử slot tiếp theo; lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
+```text
+# gemini-keys.txt
+key-1
+key-2
+key-3
+```
+
+Ứng dụng chỉ đọc file trong RAM, giới hạn 256 KB và không ghi nội dung key vào repo/log. Có thể bổ sung key qua ô password bên dưới file uploader.
+
+Pool sử dụng round-robin sau mỗi request. Nếu một key gặp lỗi quota token/rate-limit (`429`/`RESOURCE_EXHAUSTED`), key lỗi hoặc provider `5xx`, hệ thống tự chạy lại toàn bộ request bằng slot tiếp theo. Lời gọi Gemini là non-streaming nên output dở dang không được đưa ra UI; người dùng chỉ thấy kết quả hoàn chỉnh. Lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
 
 Bạn cũng có thể cấu hình key bằng biến môi trường:
 

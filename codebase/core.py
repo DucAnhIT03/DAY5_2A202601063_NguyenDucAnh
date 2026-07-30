@@ -124,9 +124,12 @@ def parse_api_keys(raw: str | None) -> list[str]:
     """Parse comma/semicolon/whitespace-separated keys and preserve order."""
     if not raw:
         return []
+    cleaned = "\n".join(
+        line.split("#", 1)[0] for line in raw.replace("\ufeff", "").splitlines()
+    )
     keys: list[str] = []
     seen: set[str] = set()
-    for candidate in re.split(r"[,;\s]+", raw.strip()):
+    for candidate in re.split(r"[,;\s]+", cleaned.strip()):
         key = candidate.strip()
         if key and key not in seen:
             keys.append(key)
