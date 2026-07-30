@@ -34,13 +34,23 @@ st.html(
         radial-gradient(circle at 92% 0%, rgba(99,102,241,.10), transparent 25rem),
         #F8F9FD;}
     .stMainBlockContainer {max-width: 1380px; padding: 1.25rem 2rem 5rem;}
-    .st-key-topbar {padding: .2rem .1rem .8rem;}
+    .st-key-topbar {padding: .35rem .15rem 1rem;}
     .st-key-topbar h3 {margin: 0; letter-spacing: -.02em;}
     .st-key-hero {
-        background: linear-gradient(125deg, #25205F 0%, #4338CA 58%, #6D5CE7 100%);
-        border: 0 !important; border-radius: 24px; padding: 1.7rem 2rem 1.45rem;
-        box-shadow: 0 20px 50px rgba(55,48,163,.20); margin-bottom: 1.25rem;
-        overflow: hidden;
+        position: relative;
+        background:
+          radial-gradient(circle at 88% 18%, rgba(167,139,250,.58), transparent 18rem),
+          linear-gradient(125deg, #211B59 0%, #4338CA 60%, #6D5CE7 100%);
+        border: 1px solid rgba(255,255,255,.12) !important;
+        border-radius: 28px; padding: 2.1rem 2.3rem 1.8rem;
+        box-shadow: 0 24px 60px rgba(55,48,163,.25); margin-bottom: 1.4rem;
+        overflow: hidden; isolation: isolate;
+    }
+    .st-key-hero::after {
+        content: ""; position: absolute; width: 260px; height: 260px;
+        border: 1px solid rgba(255,255,255,.18); border-radius: 50%;
+        right: -90px; bottom: -150px; z-index: -1;
+        box-shadow: 0 0 0 35px rgba(255,255,255,.035), 0 0 0 70px rgba(255,255,255,.025);
     }
     .st-key-hero h1, .st-key-hero p, .st-key-hero label {color: #FFFFFF !important;}
     .st-key-hero h1 {max-width: 850px; letter-spacing: -.035em; margin-bottom: .35rem;}
@@ -50,10 +60,24 @@ st.html(
     }
     .st-key-summary_strip {
         background: #FFFFFF; border: 1px solid #E7E9F2; border-radius: 16px;
-        padding: .25rem .8rem; box-shadow: 0 5px 18px rgba(30,41,59,.04);
+        padding: .45rem .9rem; box-shadow: 0 5px 18px rgba(30,41,59,.04);
+    }
+    .catchup-flow {
+        display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:.45rem 0 1.35rem;
+    }
+    .catchup-step {
+        display:flex; gap:12px; align-items:center; background:#FFFFFF;
+        border:1px solid #E5E7F0; border-radius:16px; padding:14px 16px;
+        box-shadow:0 5px 18px rgba(30,41,59,.035);
+    }
+    .catchup-step b {display:block; color:#1E1B4B; font-size:.94rem;}
+    .catchup-step small {color:#6B7280; line-height:1.35;}
+    .step-icon {
+        width:34px; height:34px; flex:0 0 34px; display:grid; place-items:center;
+        color:#4338CA; background:#EEF2FF; border-radius:11px; font-weight:800;
     }
     [class*="st-key-point_card_"] {
-        background: #FFFFFF; border-radius: 17px; padding: .28rem .45rem;
+        position:relative; background: #FFFFFF; border-radius: 18px; padding: .42rem .58rem;
         border: 1px solid #E5E7F0 !important;
         box-shadow: 0 5px 18px rgba(30,41,59,.045);
         transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
@@ -63,24 +87,31 @@ st.html(
         box-shadow: 0 12px 28px rgba(67,56,202,.10);
     }
     .st-key-source_panel {
+        position: sticky; top: 1rem;
         background: linear-gradient(180deg, #FFFFFF 0%, #FBFCFF 100%);
-        border: 1px solid #E5E7F0 !important; border-radius: 17px;
+        border: 1px solid #E5E7F0 !important; border-radius: 18px; padding:.45rem .6rem;
         box-shadow: 0 5px 18px rgba(30,41,59,.045);
     }
     .st-key-chat_shell {
         background: #FFFFFF; border: 1px solid #E5E7F0 !important;
-        border-radius: 20px; padding: .45rem .85rem 1rem;
-        box-shadow: 0 8px 26px rgba(30,41,59,.055);
+        border-radius: 22px; padding: .65rem 1rem 1.1rem;
+        box-shadow: 0 12px 35px rgba(30,41,59,.07);
     }
     .st-key-sidebar_brand {padding: .25rem .1rem .65rem;}
     [data-testid="stSidebar"] {box-shadow: 8px 0 28px rgba(30,41,59,.035);}
     [data-testid="stSidebar"] [data-testid="stButton"] button {width: 100%;}
     [data-testid="stMetric"] {padding: .35rem .2rem;}
     [data-testid="stChatMessage"] {border-radius: 14px; padding: .6rem .8rem;}
+    .assistant-welcome {
+        padding:14px 16px; background:linear-gradient(135deg,#F5F3FF,#EEF2FF);
+        border:1px solid #DDD6FE; border-radius:15px; color:#3730A3; margin:.2rem 0 .8rem;
+    }
     @media (max-width: 900px) {
         .stMainBlockContainer {padding: .8rem 1rem 4rem;}
         .st-key-hero {padding: 1.25rem; border-radius: 18px;}
         .st-key-hero h1 {font-size: 2rem !important;}
+        .catchup-flow {grid-template-columns:1fr; gap:8px;}
+        .catchup-step {padding:11px 13px;}
     }
     </style>
     """
@@ -151,7 +182,7 @@ with st.container(horizontal=True, vertical_alignment="center", key="topbar"):
         st.badge("Demo an toàn", color="orange", icon=":material/shield:")
 
 with st.container(key="hero"):
-    st.caption("CATCH-UP ASSISTANT")
+    st.markdown(":violet-badge[:material/auto_awesome: AI LEARNING COMPANION]")
     st.title("Bắt kịp một buổi học trong vài phút")
     st.write(
         "Chọn buổi bạn đã lỡ. Trợ lý sẽ chỉ ra phần nên đọc trước, "
@@ -191,6 +222,8 @@ if ai_available(active_key) and cache_key not in st.session_state.ai_generated_s
 summary = st.session_state.summary_cache[cache_key]
 quiz_count = sum(bool(point.get("quiz")) for point in summary)
 source_count = len({citation for point in summary for citation in point["citations"]})
+if not st.session_state.selected_citation and summary and summary[0].get("citations"):
+    st.session_state.selected_citation = summary[0]["citations"][0]
 
 with st.container(horizontal=True, vertical_alignment="center", key="summary_strip"):
     st.markdown(f"**:material/route: {len(summary)} trọng điểm**")
@@ -215,6 +248,25 @@ with st.container(horizontal=True, vertical_alignment="center", key="summary_str
             st.rerun()
         except Exception as exc:
             st.error(f"Không thể gọi Gemini: {exc}", icon=":material/error:")
+
+st.html(
+    f"""
+    <div class="catchup-flow">
+      <div class="catchup-step">
+        <span class="step-icon">1</span>
+        <span><b>Đọc theo trọng điểm</b><small>{len(summary)} ý được xếp theo mức ưu tiên</small></span>
+      </div>
+      <div class="catchup-step">
+        <span class="step-icon">2</span>
+        <span><b>Kiểm chứng nguồn</b><small>{source_count} đoạn transcript để đối chiếu</small></span>
+      </div>
+      <div class="catchup-step">
+        <span class="step-icon">3</span>
+        <span><b>Hỏi điều còn vướng</b><small>Trợ lý từ chối nếu không đủ căn cứ</small></span>
+      </div>
+    </div>
+    """
+)
 
 st.space("small")
 left, right = st.columns([1.35, 1], gap="large")
@@ -251,7 +303,7 @@ with left:
 with right:
     st.subheader("Kiểm chứng với bài giảng gốc", anchor=False)
     st.caption("Bạn luôn là người quyết định có tin bản tóm tắt hay không.")
-    with st.container(height=540, border=True, key="source_panel"):
+    with st.container(border=True, key="source_panel"):
         citation = st.session_state.selected_citation
         if citation and citation in segments:
             st.badge(citation, color="blue", icon=":material/bookmark:")
@@ -285,6 +337,14 @@ with st.container(border=True, key="chat_shell"):
     )
 
     if not st.session_state.messages:
+        st.html(
+            """
+            <div class="assistant-welcome">
+              <strong>Xin chào, mình đã đọc xong buổi học này.</strong><br>
+              Bạn có thể hỏi về một khái niệm, ví dụ hoặc lý do nội dung đó quan trọng cho quiz.
+            </div>
+            """
+        )
         suggestion = st.pills(
             "Câu hỏi gợi ý",
             [
@@ -308,9 +368,18 @@ with st.container(border=True, key="chat_shell"):
             if message.get("citations"):
                 st.caption("Nguồn: " + ", ".join(f"[{c}]" for c in message["citations"]))
 
-prompt = suggestion or st.chat_input(
-    "Hỏi một điều về buổi học này…", submit_mode="disable"
-)
+    with st.form("question_form", border=False):
+        with st.container(horizontal=True, vertical_alignment="bottom"):
+            typed_question = st.text_input(
+                "Câu hỏi về buổi học",
+                placeholder="Ví dụ: Vì sao symbolic AI chạm trần?",
+                label_visibility="collapsed",
+            )
+            submitted = st.form_submit_button(
+                "Gửi câu hỏi", icon=":material/arrow_upward:", type="primary"
+            )
+
+prompt = suggestion or (typed_question if submitted and typed_question.strip() else None)
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar=":material/person:"):
