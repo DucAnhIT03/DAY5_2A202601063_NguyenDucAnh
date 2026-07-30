@@ -51,8 +51,10 @@ Trong tab **Transcript** và vùng **Kiểm chứng nguồn**, người dùng c�
 phần trong cùng một đoạn rồi chọn **Giải thích bằng AI**. Hệ thống xác minh phần chọn
 thực sự thuộc mã đoạn và chỉ gửi đúng đoạn đó cho Gemini. Câu đã chọn cùng lời giải
 thích xuất hiện thành một mini-chat ngay dưới chính đoạn transcript, không đổi tab;
-các lượt hỏi tiếp trong cùng đoạn vẫn được giữ tại chỗ với citation tương ứng. Nút
-**Hỏi AI về cả đoạn** là lựa chọn nhanh khi không cần chọn một câu cụ thể.
+ô **Hỏi tiếp về phần này…** cho phép trò chuyện nhiều lượt ngay tại chỗ. Mỗi câu trả
+lời tiếp theo nhận phần đã chọn, lịch sử mini-chat và đúng một đoạn nguồn, rồi giữ lại
+toàn bộ lượt hỏi với citation tương ứng. Nút **Hỏi AI về cả đoạn** là lựa chọn nhanh
+khi không cần chọn một câu cụ thể.
 
 Kết quả Gemini chỉ được lưu vào `analyses` sau khi có 3–5 trọng điểm và mọi citation
 đều tồn tại trong đúng transcript. Bản ghi gắn fingerprint SHA-256 của transcript;

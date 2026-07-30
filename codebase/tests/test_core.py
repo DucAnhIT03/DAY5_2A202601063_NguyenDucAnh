@@ -5,6 +5,8 @@ import pytest
 
 from codebase import core
 from codebase.core import (
+    answer_selection_followup,
+    answer_selection_followup_with_key_rotation,
     answer_question,
     answer_with_key_rotation,
     default_summary,
@@ -212,4 +214,37 @@ def test_selected_text_must_belong_to_the_claimed_segment(monkeypatch):
             TRANSCRIPT,
             "Nội dung không tồn tại trong transcript",
             "T04-015",
+        )
+
+
+def test_selection_followup_keeps_the_same_citation_without_key(monkeypatch):
+    segment = load_segments(TRANSCRIPT)[14]
+    selected_text = segment.text[20:160]
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    rotated = answer_selection_followup_with_key_rotation(
+        TRANSCRIPT,
+        selected_text,
+        segment.id,
+        "Bạn giải thích đơn giản hơn được không?",
+        [{"question": None, "answer": "Lời giải thích đầu tiên."}],
+        [],
+        cursor=3,
+    )
+    assert rotated.value["mode"] == "extractive"
+    assert rotated.value["citations"] == [segment.id]
+    assert rotated.used_slot is None
+    assert rotated.next_cursor == 3
+
+
+def test_selection_followup_rejects_an_empty_question(monkeypatch):
+    segment = load_segments(TRANSCRIPT)[14]
+    selected_text = segment.text[20:160]
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="quá ngắn"):
+        answer_selection_followup(
+            TRANSCRIPT,
+            selected_text,
+            segment.id,
+            " ",
         )

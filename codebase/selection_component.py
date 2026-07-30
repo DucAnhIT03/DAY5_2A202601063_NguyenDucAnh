@@ -164,6 +164,59 @@ _CSS = """
   gap: .55rem;
   padding: .2rem .1rem;
 }
+.catchup-selection-followup {
+  border-top: 1px solid color-mix(in srgb, var(--st-primary-color) 14%, var(--st-border-color));
+  display: grid;
+  gap: .42rem;
+  margin-top: .1rem;
+  padding-top: .72rem;
+}
+.catchup-selection-followup-label {
+  color: var(--st-text-color);
+  font-size: .82rem;
+  font-weight: 700;
+  margin: 0;
+}
+.catchup-selection-followup-row {
+  display: flex;
+  gap: .45rem;
+}
+.catchup-selection-followup-input {
+  background: var(--st-background-color);
+  border: 1px solid var(--st-border-color);
+  border-radius: var(--st-button-radius, var(--st-border-radius));
+  color: var(--st-text-color);
+  flex: 1;
+  font: inherit;
+  min-width: 0;
+  padding: .58rem .68rem;
+}
+.catchup-selection-followup-input:focus {
+  border-color: var(--st-primary-color);
+  box-shadow: 0 0 0 1px var(--st-primary-color);
+  outline: none;
+}
+.catchup-selection-followup-send {
+  background: var(--st-primary-color);
+  border: 0;
+  border-radius: var(--st-button-radius, var(--st-border-radius));
+  color: var(--st-primary-color-text, white);
+  cursor: pointer;
+  font: inherit;
+  font-size: .86rem;
+  font-weight: 700;
+  padding: .58rem .78rem;
+}
+.catchup-selection-followup-send:disabled,
+.catchup-selection-followup-input:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+.catchup-selection-followup-help {
+  color: color-mix(in srgb, var(--st-text-color) 58%, transparent);
+  font-size: .74rem;
+  margin: 0;
+}
 .catchup-selection-spinner {
   animation: catchup-spin .8s linear infinite;
   border: 2px solid color-mix(in srgb, var(--st-primary-color) 22%, transparent);
@@ -234,7 +287,9 @@ export default function(component) {
 
         const question = document.createElement("p")
         question.className = "catchup-selection-question"
-        question.textContent = `Bạn đã chọn: “${String(turn.selected_text ?? "")}”`
+        question.textContent = turn.question
+          ? `Bạn hỏi tiếp: ${String(turn.question)}`
+          : `Bạn đã chọn: “${String(turn.selected_text ?? "")}”`
 
         const answer = document.createElement("p")
         answer.className = "catchup-selection-answer"
@@ -258,7 +313,9 @@ export default function(component) {
 
         const pendingQuestion = document.createElement("p")
         pendingQuestion.className = "catchup-selection-question"
-        pendingQuestion.textContent = `Bạn đã chọn: “${String(pending.text ?? "")}”`
+        pendingQuestion.textContent = pending.kind === "followup"
+          ? `Bạn hỏi tiếp: ${String(pending.question ?? "")}`
+          : `Bạn đã chọn: “${String(pending.text ?? "")}”`
 
         const pendingStatus = document.createElement("div")
         pendingStatus.className = "catchup-selection-pending"
@@ -266,10 +323,58 @@ export default function(component) {
         spinner.className = "catchup-selection-spinner"
         spinner.setAttribute("aria-hidden", "true")
         const pendingText = document.createElement("span")
-        pendingText.textContent = "Gemini đang đọc đúng đoạn này và chuẩn bị câu trả lời…"
+        pendingText.textContent = pending.kind === "followup"
+          ? "Gemini đang trả lời tiếp từ đúng ngữ cảnh này…"
+          : "Gemini đang đọc đúng đoạn này và chuẩn bị câu trả lời…"
         pendingStatus.append(spinner, pendingText)
         pendingTurn.append(pendingQuestion, pendingStatus)
         thread.appendChild(pendingTurn)
+      }
+
+      const anchorTurn = [...turns].reverse().find(turn => turn.selected_text)
+      if (anchorTurn) {
+        const followup = document.createElement("form")
+        followup.className = "catchup-selection-followup"
+
+        const followupLabel = document.createElement("p")
+        followupLabel.className = "catchup-selection-followup-label"
+        followupLabel.textContent = "Bạn chưa rõ? Hỏi tiếp ngay tại đây"
+
+        const followupRow = document.createElement("div")
+        followupRow.className = "catchup-selection-followup-row"
+        const followupInput = document.createElement("input")
+        followupInput.className = "catchup-selection-followup-input"
+        followupInput.type = "text"
+        followupInput.maxLength = 600
+        followupInput.placeholder = "Hỏi tiếp về phần này…"
+        followupInput.setAttribute("aria-label", `Hỏi tiếp về đoạn ${item.id ?? ""}`)
+        followupInput.disabled = isPending
+
+        const followupButton = document.createElement("button")
+        followupButton.className = "catchup-selection-followup-send"
+        followupButton.type = "submit"
+        followupButton.textContent = "Gửi"
+        followupButton.disabled = isPending
+
+        const followupHelp = document.createElement("p")
+        followupHelp.className = "catchup-selection-followup-help"
+        followupHelp.textContent = "Ví dụ: Tại sao? · Giải thích đơn giản hơn · Ý này liên quan gì trong đoạn?"
+
+        followup.append(followupLabel, followupRow, followupHelp)
+        followupRow.append(followupInput, followupButton)
+        followup.onsubmit = event => {
+          event.preventDefault()
+          const question = followupInput.value.replace(/\s+/g, " ").trim()
+          if (question.length < 2 || isPending) return
+          followupInput.disabled = true
+          followupButton.disabled = true
+          setTriggerValue("followup", {
+            question: question.slice(0, 600),
+            segment_id: String(item.id ?? ""),
+            selected_text: String(anchorTurn.selected_text ?? "").slice(0, 1600),
+          })
+        }
+        thread.appendChild(followup)
       }
 
       article.appendChild(thread)
@@ -368,6 +473,7 @@ def selectable_transcript(
     pending: Mapping[str, Any] | None = None,
     focus_segment_id: str | None = None,
     on_ask_change: Callable[[], None] | None = None,
+    on_followup_change: Callable[[], None] | None = None,
 ) -> Any:
     """Render selectable transcript text with an inline, grounded AI thread."""
     return _SELECTABLE_TRANSCRIPT(
@@ -382,4 +488,5 @@ def selectable_transcript(
         height=height,
         width="stretch",
         on_ask_change=on_ask_change,
+        on_followup_change=on_followup_change,
     )

@@ -3,6 +3,7 @@ import streamlit as st
 try:
     from codebase.core import (
         KeyPoolError,
+        answer_selection_followup_with_key_rotation,
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
@@ -30,6 +31,7 @@ try:
 except ModuleNotFoundError:
     from core import (
         KeyPoolError,
+        answer_selection_followup_with_key_rotation,
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
@@ -214,8 +216,45 @@ def queue_inline_explanation(component_key: str) -> None:
     st.session_state.inline_request_counter += 1
     st.session_state.pending_inline_selection = {
         "request_id": st.session_state.inline_request_counter,
+        "kind": "explanation",
         "component_key": component_key,
         "text": selected_text[:1_600],
+        "segment_id": segment_id,
+    }
+
+
+def queue_inline_followup(component_key: str) -> None:
+    component_state = st.session_state.get(component_key)
+    if component_state is None:
+        return
+    payload = (
+        component_state.get("followup")
+        if hasattr(component_state, "get")
+        else getattr(component_state, "followup", None)
+    )
+    if not isinstance(payload, dict):
+        return
+    question = " ".join(str(payload.get("question", "")).split()).strip()
+    segment_id = str(payload.get("segment_id", "")).strip()
+    component_threads = st.session_state.inline_explanations.get(component_key, {})
+    segment_thread = component_threads.get(segment_id, [])
+    anchor = next(
+        (
+            str(turn.get("selected_text", "")).strip()
+            for turn in reversed(segment_thread)
+            if str(turn.get("selected_text", "")).strip()
+        ),
+        "",
+    )
+    if len(question) < 2 or not segment_id or len(anchor) < 3:
+        return
+    st.session_state.inline_request_counter += 1
+    st.session_state.pending_inline_selection = {
+        "request_id": st.session_state.inline_request_counter,
+        "kind": "followup",
+        "component_key": component_key,
+        "text": anchor[:1_600],
+        "question": question[:600],
         "segment_id": segment_id,
     }
 
@@ -638,6 +677,9 @@ elif view == "Trọng điểm":
                     on_ask_change=(
                         lambda key=source_selection_key: queue_inline_explanation(key)
                     ),
+                    on_followup_change=(
+                        lambda key=source_selection_key: queue_inline_followup(key)
+                    ),
                 )
                 st.caption(f":material/verified: Nguồn [{citation}] · trích nguyên văn")
 
@@ -684,6 +726,9 @@ elif view == "Transcript":
                 ),
                 on_ask_change=(
                     lambda key=transcript_selection_key: queue_inline_explanation(key)
+                ),
+                on_followup_change=(
+                    lambda key=transcript_selection_key: queue_inline_followup(key)
                 ),
             )
         else:
@@ -802,34 +847,48 @@ else:
 pending_inline = st.session_state.get("pending_inline_selection")
 if isinstance(pending_inline, dict):
     component_key = str(pending_inline.get("component_key", ""))
+    request_kind = str(pending_inline.get("kind", "explanation"))
     selected_text = str(pending_inline.get("text", "")).strip()
     selected_segment_id = str(pending_inline.get("segment_id", "")).strip()
+    followup_question = str(pending_inline.get("question", "")).strip()
+    explanations = dict(st.session_state.inline_explanations)
+    component_threads = dict(explanations.get(component_key, {}))
+    segment_thread = list(component_threads.get(selected_segment_id, []))
     try:
-        rotation = explain_selection_with_key_rotation(
-            path,
-            selected_text,
-            selected_segment_id,
-            api_keys,
-            st.session_state.gemini_key_cursor,
-        )
+        if request_kind == "followup":
+            rotation = answer_selection_followup_with_key_rotation(
+                path,
+                selected_text,
+                selected_segment_id,
+                followup_question,
+                segment_thread,
+                api_keys,
+                st.session_state.gemini_key_cursor,
+            )
+        else:
+            rotation = explain_selection_with_key_rotation(
+                path,
+                selected_text,
+                selected_segment_id,
+                api_keys,
+                st.session_state.gemini_key_cursor,
+            )
         result = rotation.value
         st.session_state.gemini_key_cursor = rotation.next_cursor
         st.session_state.last_key_slot = rotation.used_slot
     except (KeyPoolError, ValueError) as exc:
         rotation = None
         result = {
-            "answer": f"Chưa thể giải thích phần này: {exc}",
+            "answer": f"Chưa thể trả lời tại đoạn này: {exc}",
             "citations": [],
             "mode": "error",
         }
 
-    explanations = dict(st.session_state.inline_explanations)
-    component_threads = dict(explanations.get(component_key, {}))
-    segment_thread = list(component_threads.get(selected_segment_id, []))
     segment_thread.append(
         {
             "request_id": pending_inline.get("request_id"),
             "selected_text": selected_text,
+            "question": followup_question if request_kind == "followup" else None,
             "segment_id": selected_segment_id,
             "answer": result["answer"],
             "mode": result.get("mode"),
