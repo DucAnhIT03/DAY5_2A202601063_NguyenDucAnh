@@ -30,6 +30,47 @@ class MongoSnapshot:
     segment_count: int
 
 
+def snapshot_to_cache_payload(snapshot: MongoSnapshot) -> dict[str, Any]:
+    """Convert domain objects to plain values that Streamlit can cache reliably."""
+    return {
+        "transcripts": [
+            {
+                "name": transcript.name,
+                "title": transcript.title,
+                "segments": [
+                    {"id": segment.id, "text": segment.text}
+                    for segment in transcript.segments
+                ],
+            }
+            for transcript in snapshot.transcripts
+        ],
+        "quiz_questions": list(snapshot.quiz_questions),
+        "database": snapshot.database,
+        "collection": snapshot.collection,
+        "segment_count": snapshot.segment_count,
+    }
+
+
+def snapshot_from_cache_payload(payload: dict[str, Any]) -> MongoSnapshot:
+    """Restore the typed snapshot after retrieving its plain cached payload."""
+    transcripts = tuple(
+        document_to_transcript(document)
+        for document in payload.get("transcripts", [])
+    )
+    return MongoSnapshot(
+        transcripts=transcripts,
+        quiz_questions=tuple(payload.get("quiz_questions", [])),
+        database=str(payload.get("database", DEFAULT_MONGO_DATABASE)),
+        collection=str(payload.get("collection", "transcripts")),
+        segment_count=int(
+            payload.get(
+                "segment_count",
+                sum(len(transcript.segments) for transcript in transcripts),
+            )
+        ),
+    )
+
+
 def mongo_uri() -> str:
     return os.getenv("MONGO_URI", DEFAULT_MONGO_URI)
 

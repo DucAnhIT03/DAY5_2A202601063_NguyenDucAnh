@@ -1,3 +1,4 @@
+import pickle
 from pathlib import Path
 
 from codebase import core
@@ -11,7 +12,12 @@ from codebase.core import (
     summarize_with_key_rotation,
     transcript_from_path,
 )
-from codebase.mongo_repository import document_to_transcript
+from codebase.mongo_repository import (
+    MongoSnapshot,
+    document_to_transcript,
+    snapshot_from_cache_payload,
+    snapshot_to_cache_payload,
+)
 
 
 TRANSCRIPT = Path("data/vlearn-pack/transcript/transcript-04-clean.md")
@@ -46,6 +52,21 @@ def test_mongo_document_is_mapped_to_a_grounded_transcript():
     )
     assert transcript.title == "Buổi kiểm thử"
     assert transcript.segments[0].id == "T99-001"
+
+
+def test_mongo_cache_payload_only_contains_pickle_safe_values():
+    transcript = transcript_from_path(TRANSCRIPT)
+    snapshot = MongoSnapshot(
+        transcripts=(transcript,),
+        quiz_questions=("Câu hỏi kiểm thử",),
+        database="catchup_assistant",
+        collection="transcripts",
+        segment_count=len(transcript.segments),
+    )
+    payload = pickle.loads(pickle.dumps(snapshot_to_cache_payload(snapshot)))
+    restored = snapshot_from_cache_payload(payload)
+    assert restored.transcripts[0].name == transcript.name
+    assert restored.segment_count == len(transcript.segments)
 
 
 def test_out_of_scope_question_is_refused_without_api_key(monkeypatch):

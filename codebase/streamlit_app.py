@@ -15,6 +15,8 @@ try:
         MongoUnavailable,
         mongo_database,
         mongo_uri,
+        snapshot_from_cache_payload,
+        snapshot_to_cache_payload,
     )
 except ModuleNotFoundError:
     from core import (
@@ -31,6 +33,8 @@ except ModuleNotFoundError:
         MongoUnavailable,
         mongo_database,
         mongo_uri,
+        snapshot_from_cache_payload,
+        snapshot_to_cache_payload,
     )
 
 
@@ -113,12 +117,15 @@ def get_mongo_repository(uri: str, database: str) -> MongoTranscriptRepository:
 
 @st.cache_data(ttl="30s", max_entries=4)
 def load_mongo_data(uri: str, database: str):
-    return get_mongo_repository(uri, database).snapshot()
+    snapshot = get_mongo_repository(uri, database).snapshot()
+    return snapshot_to_cache_payload(snapshot)
 
 
 mongo_error = None
 try:
-    mongo_snapshot = load_mongo_data(mongo_uri(), mongo_database())
+    mongo_snapshot = snapshot_from_cache_payload(
+        load_mongo_data(mongo_uri(), mongo_database())
+    )
     files = list(mongo_snapshot.transcripts)
     quiz_questions = list(mongo_snapshot.quiz_questions) or FALLBACK_QUIZ_BANK
     data_source = "mongodb"
