@@ -62,6 +62,15 @@ st.html(
         border-radius:18px; padding:.8rem 1rem 1rem;
         box-shadow:0 6px 22px rgba(30,41,59,.045);
     }
+    .st-key-overview_main, .st-key-quiz_panel, .st-key-transcript_panel {
+        background:#FFFFFF; border:1px solid #E6E8F0 !important;
+        border-radius:18px; padding:.75rem 1rem;
+        box-shadow:0 6px 22px rgba(30,41,59,.04);
+    }
+    .st-key-stat_row [data-testid="stMetric"] {
+        background:#FFFFFF; border:1px solid #E6E8F0; border-radius:15px;
+        padding:.65rem .8rem;
+    }
     .st-key-outline [data-testid="stRadio"] label {
         padding:.42rem .25rem; border-bottom:1px solid #F0F1F5;
     }
@@ -93,12 +102,17 @@ st.session_state.setdefault("summary_cache", {})
 st.session_state.setdefault("ai_generated_sessions", set())
 st.session_state.setdefault("gemini_api_key", "")
 st.session_state.setdefault("point_selector", 0)
-st.session_state.setdefault("active_view", "Lộ trình đọc")
+st.session_state.setdefault("active_view", "Tổng quan")
 
 
 def reset_lesson() -> None:
     st.session_state.messages = []
     st.session_state.point_selector = 0
+    st.session_state.active_view = "Tổng quan"
+
+
+def go_to_view(view_name: str) -> None:
+    st.session_state.active_view = view_name
 
 
 with st.sidebar:
@@ -162,7 +176,7 @@ quiz_count = sum(bool(point.get("quiz")) for point in summary)
 with st.container(horizontal=True, vertical_alignment="center", key="modebar"):
     view = st.segmented_control(
         "Khu vực",
-        ["Lộ trình đọc", "Hỏi trợ lý"],
+        ["Tổng quan", "Trọng điểm", "Transcript", "Hỏi trợ lý"],
         key="active_view",
         label_visibility="collapsed",
     )
@@ -180,7 +194,60 @@ with st.container(horizontal=True, vertical_alignment="center", key="modebar"):
         except Exception as exc:
             st.error(f"Không thể gọi Gemini: {exc}")
 
-if view == "Lộ trình đọc":
+if view == "Tổng quan":
+    main_col, quiz_col = st.columns([1.35, 1], gap="large")
+    with main_col:
+        with st.container(border=True, key="overview_main"):
+            st.caption("BẢN ĐỒ CATCH-UP")
+            st.markdown(f"## {len(summary)} điều cần nắm trong buổi này")
+            st.write(
+                "Bắt đầu từ các trọng điểm bên dưới. Mỗi ý đều có đoạn transcript "
+                "gốc để bạn kiểm tra lại trước khi chuyển sang ý tiếp theo."
+            )
+            for index, point in enumerate(summary, 1):
+                quiz_mark = " · **quiz**" if point.get("quiz") else ""
+                st.markdown(f"**{index:02d}.** {point['title']}{quiz_mark}")
+            st.button(
+                "Bắt đầu đọc trọng điểm",
+                icon=":material/arrow_forward:",
+                type="primary",
+                on_click=go_to_view,
+                args=("Trọng điểm",),
+            )
+
+    with quiz_col:
+        with st.container(horizontal=True, key="stat_row"):
+            st.metric("Trọng điểm", len(summary))
+            st.metric("Liên quan quiz", quiz_count)
+            st.metric("Đoạn bài giảng", len(segments))
+        with st.container(border=True, key="quiz_panel"):
+            st.markdown("#### :material/quiz: Nên ưu tiên cho quiz")
+            quiz_points = [point for point in summary if point.get("quiz")]
+            if quiz_points:
+                for point in quiz_points:
+                    st.markdown(f"- **{point['title']}**")
+                    if point.get("quiz_reason"):
+                        st.caption(point["quiz_reason"])
+            else:
+                st.caption("Chưa có trọng điểm nào khớp dữ liệu quiz.")
+
+    st.space("small")
+    st.markdown("### Cách sử dụng")
+    steps = st.columns(3)
+    with steps[0].container(border=True):
+        st.badge("1", color="blue")
+        st.markdown("**Đọc trọng điểm**")
+        st.caption("Nắm ý chính theo thứ tự ưu tiên.")
+    with steps[1].container(border=True):
+        st.badge("2", color="blue")
+        st.markdown("**Kiểm chứng nguồn**")
+        st.caption("Đối chiếu với transcript nguyên văn.")
+    with steps[2].container(border=True):
+        st.badge("3", color="blue")
+        st.markdown("**Hỏi điều còn vướng**")
+        st.caption("Trợ lý chỉ trả lời khi có căn cứ.")
+
+elif view == "Trọng điểm":
     outline_col, detail_col = st.columns([.82, 1.65], gap="large")
 
     with outline_col:
@@ -225,6 +292,43 @@ if view == "Lộ trình đọc":
             if citation in segments:
                 st.write(segments[citation].text)
                 st.caption(f":material/verified: Nguồn [{citation}] · trích nguyên văn")
+
+elif view == "Transcript":
+    with st.container(border=True, key="transcript_panel"):
+        st.markdown("## :material/article: Transcript buổi học")
+        st.caption(
+            "Tìm theo khái niệm hoặc mã đoạn. Kết quả luôn giữ nguyên văn từ bài giảng."
+        )
+        query = st.text_input(
+            "Tìm trong transcript",
+            placeholder="Ví dụ: deep learning hoặc T04-030",
+            icon=":material/search:",
+        ).strip().lower()
+
+        all_segments = list(segments.values())
+        if query:
+            matches = [
+                segment
+                for segment in all_segments
+                if query in segment.id.lower() or query in segment.text.lower()
+            ]
+        else:
+            matches = all_segments
+
+        with st.container(horizontal=True):
+            st.badge(f"{len(matches)} kết quả", color="blue")
+            st.caption("Hiển thị tối đa 20 đoạn mỗi lượt")
+
+        with st.container(height=520, border=True):
+            for segment in matches[:20]:
+                st.markdown(f"#### [{segment.id}]")
+                st.write(segment.text)
+                st.space("small")
+            if not matches:
+                st.info(
+                    "Không tìm thấy đoạn phù hợp. Hãy thử một từ khoá ngắn hơn.",
+                    icon=":material/search_off:",
+                )
 
 else:
     with st.container(border=True, key="chat_card"):
