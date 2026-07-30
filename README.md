@@ -1,3 +1,56 @@
+# Catch-up Assistant — VLearn
+
+Prototype giúp học viên mở một buổi đã bỏ lỡ và nhận 3–5 điểm cần đọc trước, biết điểm nào liên quan quiz, bấm về đúng đoạn transcript gốc, và hỏi thêm trong phạm vi buổi học.
+
+## Chạy dự án
+
+Yêu cầu Python 3.11+:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\streamlit.exe run codebase\streamlit_app.py
+```
+
+Mở `http://localhost:8501`. Trong sidebar chọn **Kết nối AI** và dán Gemini API key. Key chỉ được giữ trong phiên trình duyệt, không ghi vào file. Khi đã kết nối, mở một buổi học sẽ tự động gọi AI để tạo 3–5 điểm chính.
+
+Bạn cũng có thể cấu hình key bằng biến môi trường:
+
+```powershell
+$env:GEMINI_API_KEY="..."
+.\.venv\Scripts\streamlit.exe run codebase\streamlit_app.py
+```
+
+Không commit key hoặc `.streamlit/secrets.toml`. Trace AI thật được ghi cục bộ tại `codebase/logs/ai-trace.jsonl` và đã gitignore; trước khi nộp chỉ đưa trace tối thiểu không chứa transcript dài hay secret.
+
+Nếu chưa có key, app chạy **demo có kiểm soát** và gắn nhãn rõ; đây không được tính là lời gọi AI thật trong rubric.
+
+## Kiểm thử
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+## Artifact nộp bài
+
+| Artifact | Vị trí |
+|---|---|
+| AI Spec | `spec.md` |
+| Prototype | `codebase/` |
+| Golden set | `eval/golden-set.csv` |
+| Feedback log | `validation/feedback-log.md` |
+| Reflection | `reflection/NguyenDucAnh.md` |
+
+## Thành viên & phân công
+
+- **2A202601063 — Nguyễn Đức Anh:** product/spec, evidence mining, prompt, code, eval và demo.
+
+Các mục cần dữ liệu người thật hoặc API key được đánh dấu `TODO-NGƯỜI-THẬT` / `TODO-AI-KEY`; không có số liệu hay trace giả.
+
+## Tài liệu đề bài gốc
+
+Phần dưới đây được giữ nguyên để đối chiếu yêu cầu.
+
 # Mini Hackathon AI — Batch 03
 
 **SPEC → Prototype → Demo.** Đây không phải cuộc thi code — đây là cuộc thi **tư duy sản phẩm AI**.
