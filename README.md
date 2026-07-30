@@ -47,6 +47,13 @@ không tiêu key; câu hỏi tổng quan như “Tóm tắt buổi học này”
 được Gemini trả lời từ transcript đang mở, kèm citation thật. Nếu provider lỗi, UI
 hiển thị thông báo an toàn trong hội thoại thay vì làm hỏng toàn bộ trang.
 
+Pipeline trả lời được tối ưu cho độ chính xác và súc tích: tìm đoạn theo từ khoá có
+dấu/không dấu, cụm từ và độ đặc hiệu; bỏ hoạt động lớp khỏi kết quả tìm kiếm; dùng
+Gemini thinking budget với độ ngẫu nhiên thấp; ép structured JSON theo schema; rồi
+hậu kiểm `supported`, citation, nội dung lặp và giới hạn độ dài trước khi hiển thị.
+AI phải trả lời thẳng, không mở bài/kết bài, không tự tạo ví dụ; thiếu căn cứ thì từ
+chối thay vì suy đoán.
+
 Trong tab **Transcript** và vùng **Kiểm chứng nguồn**, người dùng có thể bôi đen một
 phần trong cùng một đoạn rồi chọn **Giải thích bằng AI**. Hệ thống xác minh phần chọn
 thực sự thuộc mã đoạn và chỉ gửi đúng đoạn đó cho Gemini. Câu đã chọn cùng lời giải

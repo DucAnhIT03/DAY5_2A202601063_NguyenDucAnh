@@ -1,5 +1,7 @@
+import json
 import pickle
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -248,3 +250,97 @@ def test_selection_followup_rejects_an_empty_question(monkeypatch):
             segment.id,
             " ",
         )
+
+
+def test_definition_query_ranks_the_definition_segment_first():
+    relevant, local_response = core._question_preflight(TRANSCRIPT, "AI là gì?")
+    assert local_response is None
+    assert relevant[0].id == "T04-015"
+
+
+def test_qa_uses_low_randomness_thinking_and_structured_output(monkeypatch):
+    relevant, _ = core._question_preflight(TRANSCRIPT, "Turing test là gì?")
+    citation = relevant[0].id
+    captured = {}
+
+    class FakeModels:
+        def generate_content(self, *, model, contents, config):
+            captured.update(model=model, contents=contents, config=config)
+            return SimpleNamespace(
+                text=json.dumps(
+                    {
+                        "answer": "Turing test kiểm tra khả năng phân biệt máy với người.",
+                        "citations": [citation],
+                        "supported": True,
+                    }
+                )
+            )
+
+    monkeypatch.setattr(
+        core,
+        "_gemini_client",
+        lambda api_key: SimpleNamespace(models=FakeModels()),
+    )
+    result = answer_question(TRANSCRIPT, "Turing test là gì?", "fake-key")
+    config = captured["config"]
+    assert result["grounded"] is True
+    assert result["citations"] == [citation]
+    assert config.temperature <= 0.15
+    assert config.response_mime_type == "application/json"
+    assert config.thinking_config.thinking_budget == 1_024
+    assert "không nhắc lại câu hỏi" in captured["contents"]
+
+
+def test_qa_abstains_when_model_marks_answer_unsupported(monkeypatch):
+    relevant, _ = core._question_preflight(TRANSCRIPT, "Turing test là gì?")
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            return SimpleNamespace(
+                text=json.dumps(
+                    {
+                        "answer": "Nội dung suy diễn ngoài nguồn.",
+                        "citations": [relevant[0].id],
+                        "supported": False,
+                    }
+                )
+            )
+
+    monkeypatch.setattr(
+        core,
+        "_gemini_client",
+        lambda api_key: SimpleNamespace(models=FakeModels()),
+    )
+    result = answer_question(TRANSCRIPT, "Turing test là gì?", "fake-key")
+    assert result["grounded"] is False
+    assert result["citations"] == []
+    assert "chưa tìm thấy căn cứ" in result["answer"]
+
+
+def test_selection_answer_removes_repetition_and_stays_concise(monkeypatch):
+    segment = load_segments(TRANSCRIPT)[14]
+    selected_text = segment.text[20:160]
+    repeated = "Ý chính nằm ngay trong phần được chọn. " * 80
+    captured = {}
+
+    class FakeModels:
+        def generate_content(self, *, model, contents, config):
+            captured["config"] = config
+            return SimpleNamespace(
+                text=json.dumps({"answer": repeated, "supported": True})
+            )
+
+    monkeypatch.setattr(
+        core,
+        "_gemini_client",
+        lambda api_key: SimpleNamespace(models=FakeModels()),
+    )
+    result = explain_selection(
+        TRANSCRIPT,
+        selected_text,
+        segment.id,
+        "fake-key",
+    )
+    assert result["answer"] == "Ý chính nằm ngay trong phần được chọn."
+    assert result["citations"] == [segment.id]
+    assert captured["config"].thinking_config.thinking_budget == 768
