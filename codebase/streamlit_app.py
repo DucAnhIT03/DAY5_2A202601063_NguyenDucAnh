@@ -199,16 +199,35 @@ with st.sidebar:
             except UnicodeDecodeError:
                 st.error("File key phải sử dụng mã hoá UTF-8.")
 
-    st.text_input(
-        "Key bổ sung (tuỳ chọn)",
-        type="password",
+    mask_key_input = st.toggle(
+        "Che key trên màn hình",
+        value=True,
+        key="mask_gemini_key_input",
+        help="Nên bật khi trình chiếu. Tắt tạm thời nếu cần kiểm tra từng dòng.",
+    )
+    if mask_key_input:
+        st.html(
+            """
+            <style>
+            .st-key-gemini_api_keys_raw textarea {
+                -webkit-text-security: disc;
+                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            }
+            </style>
+            """
+        )
+
+    st.text_area(
+        "Dán danh sách key · mỗi dòng một key",
+        height=150,
+        max_chars=256 * 1024,
         key="gemini_api_keys_raw",
-        placeholder="Dán thêm key, ngăn cách bằng dấu phẩy…",
-        help="Dùng khi muốn bổ sung key mà không sửa file .txt.",
+        placeholder="gemini-key-1\ngemini-key-2\ngemini-key-3",
+        help="Nhấn Enter để xuống dòng. Mỗi dòng tạo một slot trong pool.",
         on_change=reset_key_pool,
     )
     st.caption(
-        "Định dạng file: mỗi dòng một key. Dòng trống và dòng bắt đầu bằng # được bỏ qua."
+        "Mỗi dòng đúng một key · tự bỏ dòng trống, comment bắt đầu bằng # và key trùng."
     )
 
     combined_key_input = "\n".join(

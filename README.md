@@ -38,7 +38,7 @@ key-2
 key-3
 ```
 
-Ứng dụng chỉ đọc file trong RAM, giới hạn 256 KB và không ghi nội dung key vào repo/log. Có thể bổ sung key qua ô password bên dưới file uploader.
+Ứng dụng chỉ đọc file trong RAM, giới hạn 256 KB và không ghi nội dung key vào repo/log. Có thể dán trực tiếp hàng loạt vào vùng nhập nhiều dòng bên dưới file uploader; **mỗi dòng là một API key**. Bật **Che key trên màn hình** khi trình chiếu.
 
 Pool sử dụng round-robin sau mỗi request. Nếu một key gặp lỗi quota token/rate-limit (`429`/`RESOURCE_EXHAUSTED`), key lỗi hoặc provider `5xx`, hệ thống tự chạy lại toàn bộ request bằng slot tiếp theo. Lời gọi Gemini là non-streaming nên output dở dang không được đưa ra UI; người dùng chỉ thấy kết quả hoàn chỉnh. Lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
 
