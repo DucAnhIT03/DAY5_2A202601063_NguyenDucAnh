@@ -6,7 +6,7 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +23,18 @@ STOPWORDS = {
 class Segment:
     id: str
     text: str
+
+
+@dataclass(frozen=True)
+class RotationResult:
+    value: Any
+    next_cursor: int
+    used_slot: int | None
+    attempts: int
+
+
+class KeyPoolError(RuntimeError):
+    """Safe error that never includes an API key or raw provider response."""
 
 
 DEMO_SUMMARIES: dict[str, list[dict[str, Any]]] = {
@@ -106,6 +118,77 @@ def _api_key(explicit_key: str | None = None) -> str | None:
 
 def ai_available(explicit_key: str | None = None) -> bool:
     return bool(_api_key(explicit_key))
+
+
+def parse_api_keys(raw: str | None) -> list[str]:
+    """Parse comma/semicolon/whitespace-separated keys and preserve order."""
+    if not raw:
+        return []
+    keys: list[str] = []
+    seen: set[str] = set()
+    for candidate in re.split(r"[,;\s]+", raw.strip()):
+        key = candidate.strip()
+        if key and key not in seen:
+            keys.append(key)
+            seen.add(key)
+    return keys
+
+
+def configured_api_keys(explicit_raw: str | None = None) -> list[str]:
+    """Use UI keys first, then batch env, then legacy single-key env vars."""
+    explicit = parse_api_keys(explicit_raw)
+    if explicit:
+        return explicit
+    batch = parse_api_keys(os.getenv("GEMINI_API_KEYS"))
+    if batch:
+        return batch
+    return parse_api_keys(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+
+
+def masked_key_label(key: str) -> str:
+    if len(key) < 9:
+        return "••••••••"
+    return f"{key[:4]}••••{key[-4:]}"
+
+
+def _is_retryable_provider_error(error: Exception) -> bool:
+    status = getattr(error, "status_code", None) or getattr(error, "code", None)
+    try:
+        status_number = int(status) if status is not None else None
+    except (TypeError, ValueError):
+        status_number = None
+    if status_number == 400:
+        return False
+    return status_number in {401, 403, 408, 409, 429, 500, 502, 503, 504} or status_number is None
+
+
+def _run_with_rotation(
+    operation: Callable[[str], Any],
+    api_keys: list[str],
+    cursor: int = 0,
+) -> RotationResult:
+    if not api_keys:
+        raise KeyPoolError("Chưa có Gemini API key khả dụng.")
+
+    start = cursor % len(api_keys)
+    for offset in range(len(api_keys)):
+        slot = (start + offset) % len(api_keys)
+        try:
+            value = operation(api_keys[slot])
+            return RotationResult(
+                value=value,
+                next_cursor=(slot + 1) % len(api_keys),
+                used_slot=slot,
+                attempts=offset + 1,
+            )
+        except Exception as error:
+            if not _is_retryable_provider_error(error):
+                raise KeyPoolError("Gemini từ chối yêu cầu do dữ liệu gửi lên không hợp lệ.") from None
+
+    raise KeyPoolError(
+        f"Không key nào trong pool hoạt động sau {len(api_keys)} lần thử. "
+        "Hãy kiểm tra quota, trạng thái key hoặc kết nối mạng."
+    )
 
 
 def _extract_json(text: str) -> Any:
@@ -210,6 +293,49 @@ CONTEXT:
         return {"answer": "Mình chưa tìm thấy căn cứ đủ rõ trong transcript buổi này.", "citations": [], "grounded": False, "mode": "ai"}
     log_trace("qa", path.name, {"question": question, "citations": citations, "model": "gemini-2.5-flash"})
     return {"answer": data["answer"], "citations": citations, "grounded": True, "mode": "ai"}
+
+
+def summarize_with_key_rotation(
+    path: Path,
+    quiz_questions: list[str],
+    api_keys: list[str],
+    cursor: int = 0,
+) -> RotationResult:
+    return _run_with_rotation(
+        lambda key: summarize_with_gemini(path, quiz_questions, key),
+        api_keys,
+        cursor,
+    )
+
+
+def answer_with_key_rotation(
+    path: Path,
+    question: str,
+    api_keys: list[str],
+    cursor: int = 0,
+) -> RotationResult:
+    if not api_keys:
+        return RotationResult(
+            value=answer_question(path, question),
+            next_cursor=cursor,
+            used_slot=None,
+            attempts=0,
+        )
+
+    result = _run_with_rotation(
+        lambda key: answer_question(path, question, key),
+        api_keys,
+        cursor,
+    )
+    # Guardrail questions never call Gemini, so do not consume a key slot.
+    if result.value.get("mode") == "guardrail":
+        return RotationResult(
+            value=result.value,
+            next_cursor=cursor % len(api_keys),
+            used_slot=None,
+            attempts=0,
+        )
+    return result
 
 
 def log_trace(event: str, session: str, data: dict[str, Any]) -> None:

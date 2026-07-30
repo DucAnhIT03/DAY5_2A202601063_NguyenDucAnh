@@ -1,6 +1,15 @@
 from pathlib import Path
 
-from codebase.core import answer_question, default_summary, load_segments
+from codebase import core
+from codebase.core import (
+    answer_question,
+    answer_with_key_rotation,
+    default_summary,
+    load_segments,
+    masked_key_label,
+    parse_api_keys,
+    summarize_with_key_rotation,
+)
 
 
 TRANSCRIPT = Path("data/vlearn-pack/transcript/transcript-04-clean.md")
@@ -26,3 +35,42 @@ def test_out_of_scope_question_is_refused_without_api_key(monkeypatch):
     assert result["grounded"] is False
     assert result["citations"] == []
 
+
+def test_key_parser_deduplicates_and_masks():
+    keys = parse_api_keys("alpha-key-12345, beta-key-67890; alpha-key-12345")
+    assert keys == ["alpha-key-12345", "beta-key-67890"]
+    assert masked_key_label(keys[0]) == "alph••••2345"
+
+
+def test_key_rotation_fails_over_and_advances_cursor(monkeypatch):
+    class QuotaError(Exception):
+        code = 429
+
+    calls = []
+
+    def fake_summary(path, quiz_questions, api_key):
+        calls.append(api_key)
+        if api_key == "quota-key":
+            raise QuotaError()
+        return [{"title": "ok", "citations": ["T04-015"]}]
+
+    monkeypatch.setattr(core, "summarize_with_gemini", fake_summary)
+    rotated = summarize_with_key_rotation(
+        TRANSCRIPT, [], ["quota-key", "working-key", "third-key"], cursor=0
+    )
+    assert calls == ["quota-key", "working-key"]
+    assert rotated.used_slot == 1
+    assert rotated.next_cursor == 2
+    assert rotated.attempts == 2
+
+
+def test_guardrail_does_not_consume_key_slot():
+    rotated = answer_with_key_rotation(
+        TRANSCRIPT,
+        "Buổi này hướng dẫn nấu phở thế nào?",
+        ["unused-key-1", "unused-key-2"],
+        cursor=1,
+    )
+    assert rotated.value["grounded"] is False
+    assert rotated.used_slot is None
+    assert rotated.next_cursor == 1

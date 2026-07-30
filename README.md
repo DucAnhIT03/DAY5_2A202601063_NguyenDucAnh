@@ -12,12 +12,21 @@ python -m venv .venv
 .\.venv\Scripts\streamlit.exe run codebase\streamlit_app.py
 ```
 
-Mở `http://localhost:8501`. Trong sidebar chọn **Kết nối AI** và dán Gemini API key. Key chỉ được giữ trong phiên trình duyệt, không ghi vào file. Khi đã kết nối, mở một buổi học sẽ tự động gọi AI để tạo 3–5 điểm chính.
+Mở `http://localhost:8501`. Trong sidebar, nhập một hoặc nhiều key vào **Gemini API key pool**. Phân tách key bằng dấu phẩy, chấm phẩy hoặc khoảng trắng. Key chỉ được giữ trong phiên trình duyệt, không ghi vào file.
+
+Pool sử dụng round-robin sau mỗi request. Nếu một key gặp lỗi quota/rate-limit/key/provider, hệ thống tự thử slot tiếp theo; lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
 
 Bạn cũng có thể cấu hình key bằng biến môi trường:
 
 ```powershell
 $env:GEMINI_API_KEY="..."
+.\.venv\Scripts\streamlit.exe run codebase\streamlit_app.py
+```
+
+Hoặc cấu hình nhiều key bằng biến môi trường:
+
+```powershell
+$env:GEMINI_API_KEYS="key-1,key-2,key-3"
 .\.venv\Scripts\streamlit.exe run codebase\streamlit_app.py
 ```
 

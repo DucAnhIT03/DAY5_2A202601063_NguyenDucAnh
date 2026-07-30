@@ -2,21 +2,23 @@ import streamlit as st
 
 try:
     from codebase.core import (
-        ai_available,
-        answer_question,
+        answer_with_key_rotation,
+        configured_api_keys,
         default_summary,
+        masked_key_label,
         segment_map,
         session_files,
-        summarize_with_gemini,
+        summarize_with_key_rotation,
     )
 except ModuleNotFoundError:
     from core import (
-        ai_available,
-        answer_question,
+        answer_with_key_rotation,
+        configured_api_keys,
         default_summary,
+        masked_key_label,
         segment_map,
         session_files,
-        summarize_with_gemini,
+        summarize_with_key_rotation,
     )
 
 
@@ -100,7 +102,9 @@ labels = {
 st.session_state.setdefault("messages", [])
 st.session_state.setdefault("summary_cache", {})
 st.session_state.setdefault("ai_generated_sessions", set())
-st.session_state.setdefault("gemini_api_key", "")
+st.session_state.setdefault("gemini_api_keys_raw", "")
+st.session_state.setdefault("gemini_key_cursor", 0)
+st.session_state.setdefault("last_key_slot", None)
 st.session_state.setdefault("point_selector", 0)
 st.session_state.setdefault("active_view", "Tổng quan")
 
@@ -115,26 +119,55 @@ def go_to_view(view_name: str) -> None:
     st.session_state.active_view = view_name
 
 
+def reset_key_pool() -> None:
+    st.session_state.gemini_key_cursor = 0
+    st.session_state.last_key_slot = None
+    st.session_state.ai_generated_sessions = set()
+
+
 with st.sidebar:
     st.markdown("## :material/settings: Cài đặt")
     st.text_input(
-        "Gemini API key",
+        "Gemini API key pool",
         type="password",
-        key="gemini_api_key",
-        placeholder="AIza…",
-        help="Key chỉ được giữ trong phiên trình duyệt.",
+        key="gemini_api_keys_raw",
+        placeholder="key-1, key-2, key-3…",
+        help="Phân tách nhiều key bằng dấu phẩy, chấm phẩy hoặc khoảng trắng.",
+        on_change=reset_key_pool,
     )
-    st.caption("Không để lộ API key khi trình chiếu.")
-    st.markdown("**Nguyên tắc an toàn**")
-    st.caption("Chỉ dùng transcript đang mở · luôn có nguồn · không đủ căn cứ thì từ chối.")
+    st.caption("Key chỉ nằm trong phiên trình duyệt, không được ghi vào file hoặc log.")
 
-active_key = st.session_state.gemini_api_key.strip() or None
+    api_keys = configured_api_keys(st.session_state.gemini_api_keys_raw)
+    if api_keys:
+        st.success(f"{len(api_keys)} key sẵn sàng", icon=":material/key:")
+        cursor = st.session_state.gemini_key_cursor % len(api_keys)
+        st.caption(f"Request tiếp theo: slot {cursor + 1}")
+        for index, key in enumerate(api_keys[:6]):
+            marker = " ← tiếp theo" if index == cursor else ""
+            st.caption(f"Slot {index + 1}: `{masked_key_label(key)}`{marker}")
+        if len(api_keys) > 6:
+            st.caption(f"… và {len(api_keys) - 6} key khác")
+        if st.session_state.last_key_slot is not None:
+            st.caption(f"Request gần nhất dùng slot {st.session_state.last_key_slot + 1}")
+    else:
+        st.info("Chưa có key · đang chạy demo", icon=":material/science:")
+    st.markdown("**Nguyên tắc an toàn**")
+    st.caption(
+        "Round-robin sau mỗi request · tự chuyển khi hết quota · "
+        "chỉ dùng transcript đang mở · không đủ căn cứ thì từ chối."
+    )
+
+api_keys = configured_api_keys(st.session_state.gemini_api_keys_raw)
 
 with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
     st.markdown("### :material/school: VLearn · Catch-up")
     st.space("stretch")
-    if ai_available(active_key):
-        st.badge("Gemini đã kết nối", color="green", icon=":material/check_circle:")
+    if api_keys:
+        st.badge(
+            f"Gemini pool · {len(api_keys)} key",
+            color="green",
+            icon=":material/check_circle:",
+        )
     else:
         st.badge("Dữ liệu demo", color="gray", icon=":material/science:")
 
@@ -159,14 +192,23 @@ cache_key = path.name
 if cache_key not in st.session_state.summary_cache:
     st.session_state.summary_cache[cache_key] = default_summary(path)
 
-if ai_available(active_key) and cache_key not in st.session_state.ai_generated_sessions:
+if api_keys and cache_key not in st.session_state.ai_generated_sessions:
     try:
         with st.spinner("Đang đọc transcript và đối chiếu quiz…"):
-            st.session_state.summary_cache[cache_key] = summarize_with_gemini(
-                path, QUIZ_BANK, active_key
+            rotation = summarize_with_key_rotation(
+                path,
+                QUIZ_BANK,
+                api_keys,
+                st.session_state.gemini_key_cursor,
             )
+            st.session_state.summary_cache[cache_key] = rotation.value
+            st.session_state.gemini_key_cursor = rotation.next_cursor
+            st.session_state.last_key_slot = rotation.used_slot
         st.session_state.ai_generated_sessions.add(cache_key)
-        st.toast("Đã phân tích xong buổi học.", icon=":material/check_circle:")
+        st.toast(
+            f"Đã phân tích bằng key slot {rotation.used_slot + 1}.",
+            icon=":material/check_circle:",
+        )
     except Exception as exc:
         st.warning(f"Chưa thể gọi Gemini. Đang dùng dữ liệu demo. {exc}")
 
@@ -182,14 +224,20 @@ with st.container(horizontal=True, vertical_alignment="center", key="modebar"):
     )
     st.space("stretch")
     st.caption(f"{len(summary)} trọng điểm · {quiz_count} liên quan quiz · {len(segments)} đoạn transcript")
-    if ai_available(active_key) and st.button(
+    if api_keys and st.button(
         "Làm mới", icon=":material/refresh:", help="Phân tích lại bằng Gemini"
     ):
         try:
             with st.spinner("Đang phân tích lại…"):
-                st.session_state.summary_cache[cache_key] = summarize_with_gemini(
-                    path, QUIZ_BANK, active_key
+                rotation = summarize_with_key_rotation(
+                    path,
+                    QUIZ_BANK,
+                    api_keys,
+                    st.session_state.gemini_key_cursor,
                 )
+                st.session_state.summary_cache[cache_key] = rotation.value
+                st.session_state.gemini_key_cursor = rotation.next_cursor
+                st.session_state.last_key_slot = rotation.used_slot
             st.rerun()
         except Exception as exc:
             st.error(f"Không thể gọi Gemini: {exc}")
@@ -385,7 +433,15 @@ else:
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.spinner("Đang tìm căn cứ trong transcript…"):
-            result = answer_question(path, prompt, active_key)
+            rotation = answer_with_key_rotation(
+                path,
+                prompt,
+                api_keys,
+                st.session_state.gemini_key_cursor,
+            )
+            result = rotation.value
+            st.session_state.gemini_key_cursor = rotation.next_cursor
+            st.session_state.last_key_slot = rotation.used_slot
         st.session_state.messages.append(
             {
                 "role": "assistant",
