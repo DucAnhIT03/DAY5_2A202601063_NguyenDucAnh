@@ -164,3 +164,25 @@ def test_guardrail_does_not_consume_key_slot():
     assert rotated.value["grounded"] is False
     assert rotated.used_slot is None
     assert rotated.next_cursor == 1
+
+
+def test_greeting_gets_a_friendly_reply_without_consuming_key():
+    rotated = answer_with_key_rotation(
+        TRANSCRIPT,
+        "hi",
+        ["unused-key-1", "unused-key-2"],
+        cursor=1,
+    )
+    assert rotated.value["mode"] == "conversation"
+    assert "Chào bạn" in rotated.value["answer"]
+    assert rotated.used_slot is None
+    assert rotated.next_cursor == 1
+
+
+def test_overview_question_is_grounded_in_real_transcript_without_key(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    result = answer_question(TRANSCRIPT, "Tóm tắt buổi học này")
+    assert result["mode"] == "extractive"
+    assert result["grounded"] is True
+    assert result["citations"]

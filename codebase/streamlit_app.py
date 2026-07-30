@@ -2,6 +2,7 @@ import streamlit as st
 
 try:
     from codebase.core import (
+        KeyPoolError,
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
@@ -26,6 +27,7 @@ try:
     )
 except ModuleNotFoundError:
     from core import (
+        KeyPoolError,
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
@@ -274,7 +276,7 @@ with st.sidebar:
         type="primary",
         on_click=persist_manual_key_pool,
         disabled=not bool(st.session_state.gemini_api_keys_raw.strip()),
-        use_container_width=True,
+        width="stretch",
     )
     st.caption(
         "Mỗi dòng đúng một key · tự bỏ dòng trống, comment bắt đầu bằng # và key trùng. "
@@ -619,12 +621,26 @@ else:
         with st.container(horizontal=True, vertical_alignment="center"):
             st.markdown("### :material/smart_toy: Hỏi về buổi học này")
             st.space("stretch")
+            if api_keys:
+                st.badge(
+                    "Gemini sẵn sàng",
+                    color="green",
+                    icon=":material/auto_awesome:",
+                )
             if st.session_state.messages and st.button(
                 "Xoá", icon=":material/delete_sweep:", key="clear_chat"
             ):
                 st.session_state.messages = []
                 st.rerun()
-        st.caption("Trợ lý chỉ dùng transcript đang mở; không đủ căn cứ sẽ nói rõ.")
+        if api_keys:
+            st.caption(
+                "Hỏi trực tiếp tại đây để gọi Gemini; không cần phân tích buổi học trước. "
+                "Trợ lý chỉ dùng transcript đang mở và luôn dẫn nguồn khi trả lời."
+            )
+        else:
+            st.caption(
+                "Chưa có Gemini key nên trợ lý chỉ tìm đoạn transcript liên quan."
+            )
 
         if not st.session_state.messages:
             st.info(
@@ -634,9 +650,9 @@ else:
             suggestion = st.pills(
                 "Câu hỏi gợi ý",
                 [
-                    "Vì sao symbolic AI chạm trần?",
-                    "Deep learning học đặc trưng thế nào?",
-                    "Buổi này có hướng dẫn làm CV không?",
+                    "Tóm tắt buổi học này",
+                    f"Giải thích: {summary[0]['title']}",
+                    f"Giải thích: {summary[1]['title']}",
                 ],
                 label_visibility="collapsed",
             )
@@ -653,36 +669,52 @@ else:
                 st.write(message["content"])
                 if message.get("citations"):
                     st.caption("Nguồn: " + ", ".join(f"[{c}]" for c in message["citations"]))
+                if message.get("mode") == "ai":
+                    st.caption(
+                        f":material/auto_awesome: Gemini · key slot {message['slot'] + 1}"
+                    )
 
-        with st.form("question_form", border=False):
-            with st.container(horizontal=True, vertical_alignment="bottom"):
-                typed_question = st.text_input(
-                    "Câu hỏi",
-                    placeholder="Nhập điều bạn còn vướng…",
-                    label_visibility="collapsed",
-                )
-                submitted = st.form_submit_button(
-                    "Gửi", icon=":material/arrow_upward:", type="primary"
-                )
+        typed_question = st.chat_input(
+            "Hỏi về nội dung buổi học…",
+            key="lesson_chat_input",
+            submit_mode="disable",
+        )
 
-    prompt = suggestion or (typed_question if submitted and typed_question.strip() else None)
+    prompt = suggestion or (typed_question.strip() if typed_question else None)
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.spinner("Đang tìm căn cứ trong transcript…"):
-            rotation = answer_with_key_rotation(
-                path,
-                prompt,
-                api_keys,
-                st.session_state.gemini_key_cursor,
-            )
-            result = rotation.value
-            st.session_state.gemini_key_cursor = rotation.next_cursor
-            st.session_state.last_key_slot = rotation.used_slot
+        try:
+            with st.status("Trợ lý đang trả lời…", expanded=False) as qa_status:
+                def show_qa_attempt(attempt: int, total: int, slot: int) -> None:
+                    qa_status.update(
+                        label=f"Đang thử Gemini key slot {slot + 1} · {attempt}/{total}"
+                    )
+
+                rotation = answer_with_key_rotation(
+                    path,
+                    prompt,
+                    api_keys,
+                    st.session_state.gemini_key_cursor,
+                    on_attempt=show_qa_attempt,
+                )
+                result = rotation.value
+                st.session_state.gemini_key_cursor = rotation.next_cursor
+                st.session_state.last_key_slot = rotation.used_slot
+                qa_status.update(label="Đã trả lời", state="complete")
+        except KeyPoolError as exc:
+            result = {
+                "answer": f"Gemini đang tạm thời không trả lời được: {exc}",
+                "citations": [],
+                "mode": "error",
+            }
+            rotation = None
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": result["answer"],
                 "citations": result["citations"],
+                "mode": result.get("mode"),
+                "slot": rotation.used_slot if rotation else None,
             }
         )
         st.rerun()

@@ -42,6 +42,11 @@ key-3
 
 Pool sử dụng round-robin sau mỗi request. Việc dán/nạp key **không tự gọi AI**; bấm **Phân tích bằng Gemini** khi muốn chạy. Trong lúc chạy, giao diện hiển thị slot và tiến độ thử key. Nếu một key gặp lỗi quota token/rate-limit (`429`/`RESOURCE_EXHAUSTED`), key lỗi hoặc provider `5xx`, hệ thống tự chạy lại toàn bộ request bằng slot tiếp theo; mỗi request có timeout để không chờ vô hạn. Lời gọi Gemini là non-streaming nên output dở dang không được đưa ra UI; người dùng chỉ thấy kết quả hoàn chỉnh. Lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
 
+Tab **Hỏi trợ lý** dùng chat input native: lời chào/cảm ơn được phản hồi ngay mà
+không tiêu key; câu hỏi tổng quan như “Tóm tắt buổi học này” và câu hỏi khái niệm
+được Gemini trả lời từ transcript đang mở, kèm citation thật. Nếu provider lỗi, UI
+hiển thị thông báo an toàn trong hội thoại thay vì làm hỏng toàn bộ trang.
+
 Kết quả Gemini chỉ được lưu vào `analyses` sau khi có 3–5 trọng điểm và mọi citation
 đều tồn tại trong đúng transcript. Bản ghi gắn fingerprint SHA-256 của transcript;
 khi nguồn thay đổi, phân tích cũ không được tái sử dụng. Có thể tạo/làm mới phân tích

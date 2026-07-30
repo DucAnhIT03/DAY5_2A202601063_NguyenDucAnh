@@ -19,6 +19,21 @@ STOPWORDS = {
     "dẫn", "trong", "về", "cách", "có", "nói", "cho", "mình", "là", "và",
 }
 
+GREETING_PREFIXES = ("hi", "hello", "hey", "alo", "chào", "xin chào")
+THANKS_PREFIXES = ("cảm ơn", "cam on", "thank", "thanks")
+OVERVIEW_PHRASES = (
+    "tóm tắt",
+    "tom tat",
+    "tổng quan",
+    "tong quan",
+    "nội dung chính",
+    "noi dung chinh",
+    "bài này nói",
+    "bai nay noi",
+    "buổi này nói",
+    "buoi nay noi",
+)
+
 
 @dataclass(frozen=True)
 class Segment:
@@ -177,6 +192,58 @@ def normalize_confidence(value: Any) -> str:
     }.get(normalized, "chưa rõ")
 
 
+def _normalized_question(question: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^\wÀ-ỹ]+", " ", question.lower())).strip()
+
+
+def _conversation_reply(question: str) -> dict[str, Any] | None:
+    normalized = _normalized_question(question)
+    if any(
+        normalized == prefix or normalized.startswith(f"{prefix} ")
+        for prefix in GREETING_PREFIXES
+    ):
+        return {
+            "answer": (
+                "Chào bạn! Mình là trợ lý AI của buổi học đang mở. Bạn có thể hỏi "
+                "“Tóm tắt buổi này” hoặc hỏi về một khái niệm cụ thể trong bài."
+            ),
+            "citations": [],
+            "grounded": False,
+            "mode": "conversation",
+        }
+    if any(
+        normalized == prefix or normalized.startswith(f"{prefix} ")
+        for prefix in THANKS_PREFIXES
+    ):
+        return {
+            "answer": "Rất vui được hỗ trợ bạn. Cứ hỏi tiếp điều bạn còn vướng trong buổi học nhé!",
+            "citations": [],
+            "grounded": False,
+            "mode": "conversation",
+        }
+    return None
+
+
+def _is_overview_question(question: str) -> bool:
+    normalized = _normalized_question(question)
+    return any(phrase in normalized for phrase in OVERVIEW_PHRASES)
+
+
+def _overview_segments(segments: list[Segment], limit: int = 8) -> list[Segment]:
+    candidates = [
+        segment
+        for segment in segments
+        if len(segment.text) > 120 and "[Hoạt động lớp:" not in segment.text
+    ] or segments
+    if len(candidates) <= limit:
+        return candidates
+    indexes = {
+        round(position * (len(candidates) - 1) / (limit - 1))
+        for position in range(limit)
+    }
+    return [candidates[index] for index in sorted(indexes)]
+
+
 def _is_retryable_provider_error(error: Exception) -> bool:
     if isinstance(error, (json.JSONDecodeError, ValueError, TypeError, KeyError)):
         # Changing API keys cannot repair a malformed/invalid model response.
@@ -289,58 +356,98 @@ TRANSCRIPT:
     return result[:5]
 
 
-def answer_question(
+def _question_preflight(
     source: TranscriptSource,
     question: str,
-    api_key: str | None = None,
-) -> dict[str, Any]:
+) -> tuple[list[Segment], dict[str, Any] | None]:
+    conversation = _conversation_reply(question)
+    if conversation:
+        return [], conversation
+
     segments = load_segments(source)
     tokens = {
         token for token in re.findall(r"\w{3,}", question.lower(), re.UNICODE)
         if token not in STOPWORDS
     }
     if not tokens:
-        return {
-            "answer": "Câu hỏi chưa đủ cụ thể để đối chiếu transcript. Bạn hãy thêm tên khái niệm hoặc nội dung muốn tìm.",
+        return [], {
+            "answer": (
+                "Câu hỏi chưa đủ cụ thể để đối chiếu transcript. Bạn hãy thêm "
+                "tên khái niệm hoặc nội dung muốn tìm."
+            ),
             "citations": [],
             "grounded": False,
             "mode": "guardrail",
         }
-    segment_tokens = {
-        s.id: set(re.findall(r"\w{3,}", s.text.lower(), re.UNICODE)) for s in segments
-    }
-    ranked = sorted(
-        segments,
-        key=lambda s: len(tokens & segment_tokens[s.id]),
-        reverse=True,
-    )
-    minimum_overlap = 1 if len(tokens) == 1 else 2
-    relevant = [s for s in ranked[:5] if len(tokens & segment_tokens[s.id]) >= minimum_overlap]
+    if _is_overview_question(question):
+        relevant = _overview_segments(segments)
+    else:
+        segment_tokens = {
+            s.id: set(re.findall(r"\w{3,}", s.text.lower(), re.UNICODE))
+            for s in segments
+        }
+        ranked = sorted(
+            segments,
+            key=lambda s: len(tokens & segment_tokens[s.id]),
+            reverse=True,
+        )
+        minimum_overlap = 1 if len(tokens) == 1 else 2
+        relevant = [
+            s
+            for s in ranked[:5]
+            if len(tokens & segment_tokens[s.id]) >= minimum_overlap
+        ]
     if not relevant:
-        return {
-            "answer": "Mình chưa tìm thấy căn cứ đủ rõ trong transcript buổi này để trả lời. Bạn có thể hỏi lại bằng tên khái niệm xuất hiện trong bài.",
+        return [], {
+            "answer": (
+                "Mình chưa tìm thấy căn cứ đủ rõ trong transcript buổi này để trả "
+                "lời. Bạn có thể hỏi lại bằng tên khái niệm xuất hiện trong bài."
+            ),
             "citations": [],
             "grounded": False,
             "mode": "guardrail",
         }
+    return relevant, None
+
+
+def _extractive_answer(relevant: list[Segment]) -> dict[str, Any]:
+    best = relevant[0]
+    suffix = "…" if len(best.text) > 420 else ""
+    return {
+        "answer": (
+            "Chưa gọi Gemini; đây là đoạn transcript thật liên quan nhất: "
+            f"“{best.text[:420]}{suffix}”"
+        ),
+        "citations": [best.id],
+        "grounded": True,
+        "mode": "extractive",
+    }
+
+
+def answer_question(
+    source: TranscriptSource,
+    question: str,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    relevant, local_response = _question_preflight(source, question)
+    if local_response:
+        return local_response
     if not ai_available(api_key):
-        best = relevant[0]
-        return {
-            "answer": f"Chưa gọi Gemini; đây là đoạn transcript thật liên quan nhất: “{best.text[:420]}{'…' if len(best.text) > 420 else ''}”",
-            "citations": [best.id],
-            "grounded": True,
-            "mode": "extractive",
-        }
+        return _extractive_answer(relevant)
 
     context = "\n".join(f"[{s.id}] {s.text}" for s in relevant)
-    prompt = f"""Chỉ trả lời từ CONTEXT. Nếu không đủ căn cứ, trả đúng chuỗi KHONG_DU_CAN_CU.
-Trả JSON: {{"answer":"...", "citations":["Txx-NNN"]}}. Không dùng kiến thức ngoài.
+    prompt = f"""Bạn là trợ lý học tập thân thiện. Chỉ trả lời từ CONTEXT.
+Nếu không đủ căn cứ, trả đúng chuỗi KHONG_DU_CAN_CU trong trường answer.
+Trả JSON: {{"answer":"...", "citations":["Txx-NNN"]}}.
+Trả lời rõ ràng bằng tiếng Việt, không dùng kiến thức ngoài và chỉ trích dẫn đoạn thực sự hỗ trợ câu trả lời.
 CÂU HỎI: {question}
 CONTEXT:
 {context}"""
     client = _gemini_client(api_key)
     response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
     data = _extract_json(response.text)
+    if not isinstance(data, dict) or not isinstance(data.get("answer"), str):
+        raise ValueError("Gemini trả về câu trả lời không đúng định dạng.")
     if data.get("answer") == "KHONG_DU_CAN_CU":
         return {"answer": "Mình chưa tìm thấy căn cứ đủ rõ trong transcript buổi này.", "citations": [], "grounded": False, "mode": "ai"}
     valid_ids = {s.id for s in relevant}
@@ -373,9 +480,17 @@ def answer_with_key_rotation(
     cursor: int = 0,
     on_attempt: AttemptCallback | None = None,
 ) -> RotationResult:
+    relevant, local_response = _question_preflight(source, question)
+    if local_response:
+        return RotationResult(
+            value=local_response,
+            next_cursor=cursor % len(api_keys) if api_keys else cursor,
+            used_slot=None,
+            attempts=0,
+        )
     if not api_keys:
         return RotationResult(
-            value=answer_question(source, question),
+            value=_extractive_answer(relevant),
             next_cursor=cursor,
             used_slot=None,
             attempts=0,
@@ -387,14 +502,6 @@ def answer_with_key_rotation(
         cursor,
         on_attempt,
     )
-    # Guardrail questions never call Gemini, so do not consume a key slot.
-    if result.value.get("mode") == "guardrail":
-        return RotationResult(
-            value=result.value,
-            next_cursor=cursor % len(api_keys),
-            used_slot=None,
-            attempts=0,
-        )
     return result
 
 
