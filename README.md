@@ -45,13 +45,13 @@ Nếu chưa có key, app chạy **demo có kiểm soát** và gắn nhãn rõ; �
 
 | Thành viên | Mã học viên | Vai trò & phần phụ trách |
 |---|---|---|
-| **Nguyễn Đức Anh (Trưởng nhóm)** | **2A202601063** | Điều phối nhóm; product/spec; kiến trúc AI; tích hợp Gemini; tổng hợp code và demo |
-| **Phan Văn Hiếu** | **2A202601227** | Mining transcript/chatlog; thu thập evidence; kiểm tra trích dẫn nguồn |
-| **Nguyễn Huy Tỏa** | **2A202601697** | Thiết kế prompt; xây golden set; chạy và tổng hợp kết quả evaluation |
-| **Tạ Long Khánh** | **2A202601197** | Thiết kế UI/UX; kiểm thử luồng sử dụng; hoàn thiện prototype Streamlit |
-| **Vũ Đăng Huy** | **2A202601761** | User validation; feedback log; slide thuyết trình và demo script |
+| **Nguyễn Đức Anh (Trưởng nhóm)** | **2A202601063** | Chịu trách nhiệm chính toàn dự án: điều phối và chốt quyết định sản phẩm; viết AI Spec; thiết kế kiến trúc và prompt; lập trình core AI, guardrail, backend và giao diện Streamlit; tích hợp Gemini; xây golden set và chạy eval; tổng hợp repo, slide và dẫn demo |
+| **Phan Văn Hiếu** | **2A202601227** | Hỗ trợ mining transcript/chatlog, thu thập evidence và đối chiếu mã trích dẫn |
+| **Nguyễn Huy Tỏa** | **2A202601697** | Hỗ trợ rà soát golden set, chấm kết quả evaluation và ghi nhận case lỗi |
+| **Tạ Long Khánh** | **2A202601197** | Hỗ trợ kiểm thử luồng giao diện, góp ý UI/UX và kiểm tra responsive |
+| **Vũ Đăng Huy** | **2A202601761** | Hỗ trợ user validation, ghi feedback và chuẩn bị nội dung thuyết trình |
 
-> Phân công là đầu mối chịu trách nhiệm chính. Cả 5 thành viên cùng review spec, thử prototype và tham gia phần trình bày/Q&A.
+> Trưởng nhóm Nguyễn Đức Anh phụ trách phần lớn khối lượng và toàn bộ hạng mục cốt lõi; các thành viên còn lại hỗ trợ theo đầu việc được giao. Cả 5 thành viên cùng review sản phẩm và tham gia phần trình bày/Q&A.
 
 Các mục cần dữ liệu người thật hoặc API key được đánh dấu `TODO-NGƯỜI-THẬT` / `TODO-AI-KEY`; không có số liệu hay trace giả.
 
