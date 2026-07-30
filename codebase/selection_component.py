@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import streamlit as st
@@ -106,6 +106,73 @@ _CSS = """
 .catchup-selection-segment-ask-all:hover {
   background: color-mix(in srgb, var(--st-primary-color) 8%, transparent);
 }
+.catchup-selection-thread {
+  background: color-mix(in srgb, var(--st-primary-color) 4%, var(--st-background-color));
+  border: 1px solid color-mix(in srgb, var(--st-primary-color) 18%, var(--st-border-color));
+  border-radius: var(--st-border-radius);
+  display: grid;
+  gap: .7rem;
+  margin-top: .75rem;
+  padding: .75rem;
+}
+.catchup-selection-thread-title {
+  align-items: center;
+  color: var(--st-primary-color);
+  display: flex;
+  font-size: .82rem;
+  font-weight: 750;
+  gap: .35rem;
+  margin: 0;
+}
+.catchup-selection-turn {
+  display: grid;
+  gap: .48rem;
+}
+.catchup-selection-question {
+  background: color-mix(in srgb, var(--st-primary-color) 11%, var(--st-background-color));
+  border-left: 3px solid var(--st-primary-color);
+  border-radius: 0 var(--st-border-radius) var(--st-border-radius) 0;
+  color: var(--st-text-color);
+  font-size: .88rem;
+  line-height: 1.5;
+  margin: 0 0 0 1.5rem;
+  padding: .55rem .65rem;
+}
+.catchup-selection-answer {
+  background: var(--st-background-color);
+  border: 1px solid var(--st-border-color);
+  border-radius: var(--st-border-radius);
+  line-height: 1.58;
+  margin: 0;
+  padding: .7rem .75rem;
+  white-space: pre-wrap;
+}
+.catchup-selection-answer.is-error {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--st-border-color));
+}
+.catchup-selection-meta {
+  color: color-mix(in srgb, var(--st-text-color) 62%, transparent);
+  font-size: .75rem;
+  margin: 0 .15rem;
+}
+.catchup-selection-pending {
+  align-items: center;
+  color: var(--st-primary-color);
+  display: flex;
+  font-size: .86rem;
+  font-weight: 650;
+  gap: .55rem;
+  padding: .2rem .1rem;
+}
+.catchup-selection-spinner {
+  animation: catchup-spin .8s linear infinite;
+  border: 2px solid color-mix(in srgb, var(--st-primary-color) 22%, transparent);
+  border-radius: 999px;
+  border-top-color: var(--st-primary-color);
+  height: .9rem;
+  width: .9rem;
+}
+@keyframes catchup-spin { to { transform: rotate(360deg); } }
 """
 
 _JS = r"""
@@ -148,7 +215,79 @@ export default function(component) {
     actions.appendChild(wholeButton)
 
     article.append(heading, paragraph, actions)
+
+    const turns = data?.explanations?.[String(item.id ?? "")] ?? []
+    const pending = data?.pending
+    const isPending = String(pending?.segment_id ?? "") === String(item.id ?? "")
+    if (turns.length || isPending) {
+      const thread = document.createElement("section")
+      thread.className = "catchup-selection-thread"
+
+      const threadTitle = document.createElement("p")
+      threadTitle.className = "catchup-selection-thread-title"
+      threadTitle.textContent = "AI · Giải thích ngay tại đoạn này"
+      thread.appendChild(threadTitle)
+
+      for (const turn of turns) {
+        const turnElement = document.createElement("div")
+        turnElement.className = "catchup-selection-turn"
+
+        const question = document.createElement("p")
+        question.className = "catchup-selection-question"
+        question.textContent = `Bạn đã chọn: “${String(turn.selected_text ?? "")}”`
+
+        const answer = document.createElement("p")
+        answer.className = "catchup-selection-answer"
+        if (turn.mode === "error") answer.classList.add("is-error")
+        answer.textContent = String(turn.answer ?? "")
+
+        const meta = document.createElement("p")
+        meta.className = "catchup-selection-meta"
+        const source = String(turn.segment_id ?? item.id ?? "")
+        const provider = turn.mode === "ai" ? "Gemini" : "Trích xuất từ transcript"
+        const slot = Number.isInteger(turn.slot) ? ` · key slot ${turn.slot + 1}` : ""
+        meta.textContent = `Nguồn [${source}] · ${provider}${slot}`
+
+        turnElement.append(question, answer, meta)
+        thread.appendChild(turnElement)
+      }
+
+      if (isPending) {
+        const pendingTurn = document.createElement("div")
+        pendingTurn.className = "catchup-selection-turn"
+
+        const pendingQuestion = document.createElement("p")
+        pendingQuestion.className = "catchup-selection-question"
+        pendingQuestion.textContent = `Bạn đã chọn: “${String(pending.text ?? "")}”`
+
+        const pendingStatus = document.createElement("div")
+        pendingStatus.className = "catchup-selection-pending"
+        const spinner = document.createElement("span")
+        spinner.className = "catchup-selection-spinner"
+        spinner.setAttribute("aria-hidden", "true")
+        const pendingText = document.createElement("span")
+        pendingText.textContent = "Gemini đang đọc đúng đoạn này và chuẩn bị câu trả lời…"
+        pendingStatus.append(spinner, pendingText)
+        pendingTurn.append(pendingQuestion, pendingStatus)
+        thread.appendChild(pendingTurn)
+      }
+
+      article.appendChild(thread)
+    }
     stage.appendChild(article)
+  }
+
+  const focusedSegment = String(data?.focus_segment_id ?? data?.pending?.segment_id ?? "")
+  if (focusedSegment) {
+    const target = Array.from(stage.querySelectorAll("[data-segment-id]")).find(
+      element => element.dataset.segmentId === focusedSegment
+    )
+    requestAnimationFrame(() => {
+      target?.querySelector(".catchup-selection-thread")?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      })
+    })
   }
 
   let selected = null
@@ -225,12 +364,21 @@ def selectable_transcript(
     key: str,
     compact: bool = False,
     height: int = 560,
+    explanations: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+    pending: Mapping[str, Any] | None = None,
+    focus_segment_id: str | None = None,
     on_ask_change: Callable[[], None] | None = None,
 ) -> Any:
-    """Render trusted transcript text and emit an ask trigger for one selection."""
+    """Render selectable transcript text with an inline, grounded AI thread."""
     return _SELECTABLE_TRANSCRIPT(
         key=key,
-        data={"segments": list(segments), "compact": compact},
+        data={
+            "segments": list(segments),
+            "compact": compact,
+            "explanations": dict(explanations or {}),
+            "pending": dict(pending) if pending else None,
+            "focus_segment_id": focus_segment_id,
+        },
         height=height,
         width="stretch",
         on_ask_change=on_ask_change,

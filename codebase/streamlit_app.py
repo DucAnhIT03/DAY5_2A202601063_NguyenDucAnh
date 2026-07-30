@@ -166,7 +166,10 @@ except KeyVaultError as exc:
     initial_vault_error = str(exc)
 
 st.session_state.setdefault("messages", [])
-st.session_state.setdefault("pending_selection", None)
+st.session_state.setdefault("pending_inline_selection", None)
+st.session_state.setdefault("inline_explanations", {})
+st.session_state.setdefault("inline_focus", {})
+st.session_state.setdefault("inline_request_counter", 0)
 st.session_state.setdefault("gemini_api_keys_raw", "")
 if st.session_state.get("key_input_security_version") != 1:
     # Xóa giá trị mà các bản cũ từng nạp vào widget; key đã nằm trong DPAPI vault.
@@ -182,7 +185,9 @@ st.session_state.setdefault("active_view", "Tổng quan")
 
 def reset_lesson() -> None:
     st.session_state.messages = []
-    st.session_state.pending_selection = None
+    st.session_state.pending_inline_selection = None
+    st.session_state.inline_explanations = {}
+    st.session_state.inline_focus = {}
     st.session_state.point_selector = 0
     st.session_state.active_view = "Tổng quan"
 
@@ -191,7 +196,7 @@ def go_to_view(view_name: str) -> None:
     st.session_state.active_view = view_name
 
 
-def queue_selected_text(component_key: str) -> None:
+def queue_inline_explanation(component_key: str) -> None:
     component_state = st.session_state.get(component_key)
     if component_state is None:
         return
@@ -206,11 +211,24 @@ def queue_selected_text(component_key: str) -> None:
     segment_id = str(payload.get("segment_id", "")).strip()
     if len(selected_text) < 3 or not segment_id:
         return
-    st.session_state.pending_selection = {
+    st.session_state.inline_request_counter += 1
+    st.session_state.pending_inline_selection = {
+        "request_id": st.session_state.inline_request_counter,
+        "component_key": component_key,
         "text": selected_text[:1_600],
         "segment_id": segment_id,
     }
-    st.session_state.active_view = "Hỏi trợ lý"
+
+
+def inline_explanations_for(component_key: str) -> dict:
+    return st.session_state.inline_explanations.get(component_key, {})
+
+
+def inline_pending_for(component_key: str) -> dict | None:
+    pending = st.session_state.get("pending_inline_selection")
+    if isinstance(pending, dict) and pending.get("component_key") == component_key:
+        return pending
+    return None
 
 
 def reset_key_pool() -> None:
@@ -612,7 +630,14 @@ elif view == "Trọng điểm":
                     key=source_selection_key,
                     compact=True,
                     height=340,
-                    on_ask_change=lambda key=source_selection_key: queue_selected_text(key),
+                    explanations=inline_explanations_for(source_selection_key),
+                    pending=inline_pending_for(source_selection_key),
+                    focus_segment_id=st.session_state.inline_focus.get(
+                        source_selection_key
+                    ),
+                    on_ask_change=(
+                        lambda key=source_selection_key: queue_inline_explanation(key)
+                    ),
                 )
                 st.caption(f":material/verified: Nguồn [{citation}] · trích nguyên văn")
 
@@ -621,7 +646,7 @@ elif view == "Transcript":
         st.markdown("## :material/article: Transcript buổi học")
         st.caption(
             "Tìm theo khái niệm hoặc mã đoạn. Bôi đen một phần trong cùng một đoạn, "
-            "sau đó chọn “Giải thích bằng AI”."
+            "sau đó chọn “Giải thích bằng AI”; câu trả lời sẽ hiện ngay dưới đoạn đó."
         )
         query = st.text_input(
             "Tìm trong transcript",
@@ -652,8 +677,13 @@ elif view == "Transcript":
                 ],
                 key=transcript_selection_key,
                 height=560,
+                explanations=inline_explanations_for(transcript_selection_key),
+                pending=inline_pending_for(transcript_selection_key),
+                focus_segment_id=st.session_state.inline_focus.get(
+                    transcript_selection_key
+                ),
                 on_ask_change=(
-                    lambda key=transcript_selection_key: queue_selected_text(key)
+                    lambda key=transcript_selection_key: queue_inline_explanation(key)
                 ),
             )
         else:
@@ -663,7 +693,6 @@ elif view == "Transcript":
             )
 
 else:
-    selection_request = st.session_state.pop("pending_selection", None)
     with st.container(border=True, key="chat_card"):
         with st.container(horizontal=True, vertical_alignment="center"):
             st.markdown("### :material/smart_toy: Hỏi về buổi học này")
@@ -727,52 +756,24 @@ else:
             submit_mode="disable",
         )
 
-    prompt = (
-        selection_request
-        or suggestion
-        or (typed_question.strip() if typed_question else None)
-    )
+    prompt = suggestion or (typed_question.strip() if typed_question else None)
     if prompt:
-        selection_payload = prompt if isinstance(prompt, dict) else None
-        if selection_payload:
-            selected_text = selection_payload["text"]
-            selected_segment_id = selection_payload["segment_id"]
-            user_content = (
-                f"Giải thích phần đã bôi đen [{selected_segment_id}]:\n\n"
-                f"> {selected_text}"
-            )
-        else:
-            user_content = str(prompt)
+        user_content = str(prompt)
         st.session_state.messages.append({"role": "user", "content": user_content})
         try:
-            status_label = (
-                "Gemini đang giải thích phần bôi đen…"
-                if selection_payload
-                else "Trợ lý đang trả lời…"
-            )
-            with st.status(status_label, expanded=False) as qa_status:
+            with st.status("Trợ lý đang trả lời…", expanded=False) as qa_status:
                 def show_qa_attempt(attempt: int, total: int, slot: int) -> None:
                     qa_status.update(
                         label=f"Đang thử Gemini key slot {slot + 1} · {attempt}/{total}"
                     )
 
-                if selection_payload:
-                    rotation = explain_selection_with_key_rotation(
-                        path,
-                        selected_text,
-                        selected_segment_id,
-                        api_keys,
-                        st.session_state.gemini_key_cursor,
-                        on_attempt=show_qa_attempt,
-                    )
-                else:
-                    rotation = answer_with_key_rotation(
-                        path,
-                        str(prompt),
-                        api_keys,
-                        st.session_state.gemini_key_cursor,
-                        on_attempt=show_qa_attempt,
-                    )
+                rotation = answer_with_key_rotation(
+                    path,
+                    str(prompt),
+                    api_keys,
+                    st.session_state.gemini_key_cursor,
+                    on_attempt=show_qa_attempt,
+                )
                 result = rotation.value
                 st.session_state.gemini_key_cursor = rotation.next_cursor
                 st.session_state.last_key_slot = rotation.used_slot
@@ -794,3 +795,53 @@ else:
             }
         )
         st.rerun()
+
+
+# Xử lý sau khi component đã được vẽ để trạng thái chờ xuất hiện đúng trong đoạn
+# đang đọc. Kết quả được lưu ở state riêng rồi hydrate ngược vào CCv2 ở rerun kế.
+pending_inline = st.session_state.get("pending_inline_selection")
+if isinstance(pending_inline, dict):
+    component_key = str(pending_inline.get("component_key", ""))
+    selected_text = str(pending_inline.get("text", "")).strip()
+    selected_segment_id = str(pending_inline.get("segment_id", "")).strip()
+    try:
+        rotation = explain_selection_with_key_rotation(
+            path,
+            selected_text,
+            selected_segment_id,
+            api_keys,
+            st.session_state.gemini_key_cursor,
+        )
+        result = rotation.value
+        st.session_state.gemini_key_cursor = rotation.next_cursor
+        st.session_state.last_key_slot = rotation.used_slot
+    except (KeyPoolError, ValueError) as exc:
+        rotation = None
+        result = {
+            "answer": f"Chưa thể giải thích phần này: {exc}",
+            "citations": [],
+            "mode": "error",
+        }
+
+    explanations = dict(st.session_state.inline_explanations)
+    component_threads = dict(explanations.get(component_key, {}))
+    segment_thread = list(component_threads.get(selected_segment_id, []))
+    segment_thread.append(
+        {
+            "request_id": pending_inline.get("request_id"),
+            "selected_text": selected_text,
+            "segment_id": selected_segment_id,
+            "answer": result["answer"],
+            "mode": result.get("mode"),
+            "slot": rotation.used_slot if rotation else None,
+        }
+    )
+    component_threads[selected_segment_id] = segment_thread
+    explanations[component_key] = component_threads
+    st.session_state.inline_explanations = explanations
+    st.session_state.inline_focus = {
+        **st.session_state.inline_focus,
+        component_key: selected_segment_id,
+    }
+    st.session_state.pending_inline_selection = None
+    st.rerun()
