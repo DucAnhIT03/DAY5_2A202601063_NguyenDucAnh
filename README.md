@@ -47,6 +47,12 @@ không tiêu key; câu hỏi tổng quan như “Tóm tắt buổi học này”
 được Gemini trả lời từ transcript đang mở, kèm citation thật. Nếu provider lỗi, UI
 hiển thị thông báo an toàn trong hội thoại thay vì làm hỏng toàn bộ trang.
 
+Trong tab **Transcript** và vùng **Kiểm chứng nguồn**, người dùng có thể bôi đen một
+phần trong cùng một đoạn rồi chọn **Giải thích bằng AI**. Hệ thống xác minh phần chọn
+thực sự thuộc mã đoạn, chỉ gửi đúng đoạn đó cho Gemini và tự chuyển sang hội thoại
+với citation tương ứng. Nút **Hỏi AI về cả đoạn** là lựa chọn nhanh khi không cần chọn
+một câu cụ thể.
+
 Kết quả Gemini chỉ được lưu vào `analyses` sau khi có 3–5 trọng điểm và mọi citation
 đều tồn tại trong đúng transcript. Bản ghi gắn fingerprint SHA-256 của transcript;
 khi nguồn thay đổi, phân tích cũ không được tái sử dụng. Có thể tạo/làm mới phân tích

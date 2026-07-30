@@ -6,6 +6,7 @@ try:
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
+        explain_selection_with_key_rotation,
         masked_key_label,
         parse_api_keys,
         segment_map,
@@ -25,12 +26,14 @@ try:
         snapshot_from_cache_payload,
         snapshot_to_cache_payload,
     )
+    from codebase.selection_component import selectable_transcript
 except ModuleNotFoundError:
     from core import (
         KeyPoolError,
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
+        explain_selection_with_key_rotation,
         masked_key_label,
         parse_api_keys,
         segment_map,
@@ -50,6 +53,7 @@ except ModuleNotFoundError:
         snapshot_from_cache_payload,
         snapshot_to_cache_payload,
     )
+    from selection_component import selectable_transcript
 
 
 st.set_page_config(
@@ -162,6 +166,7 @@ except KeyVaultError as exc:
     initial_vault_error = str(exc)
 
 st.session_state.setdefault("messages", [])
+st.session_state.setdefault("pending_selection", None)
 st.session_state.setdefault("gemini_api_keys_raw", "")
 if st.session_state.get("key_input_security_version") != 1:
     # Xóa giá trị mà các bản cũ từng nạp vào widget; key đã nằm trong DPAPI vault.
@@ -177,12 +182,35 @@ st.session_state.setdefault("active_view", "Tổng quan")
 
 def reset_lesson() -> None:
     st.session_state.messages = []
+    st.session_state.pending_selection = None
     st.session_state.point_selector = 0
     st.session_state.active_view = "Tổng quan"
 
 
 def go_to_view(view_name: str) -> None:
     st.session_state.active_view = view_name
+
+
+def queue_selected_text(component_key: str) -> None:
+    component_state = st.session_state.get(component_key)
+    if component_state is None:
+        return
+    payload = (
+        component_state.get("ask")
+        if hasattr(component_state, "get")
+        else getattr(component_state, "ask", None)
+    )
+    if not isinstance(payload, dict):
+        return
+    selected_text = str(payload.get("text", "")).strip()
+    segment_id = str(payload.get("segment_id", "")).strip()
+    if len(selected_text) < 3 or not segment_id:
+        return
+    st.session_state.pending_selection = {
+        "text": selected_text[:1_600],
+        "segment_id": segment_id,
+    }
+    st.session_state.active_view = "Hỏi trợ lý"
 
 
 def reset_key_pool() -> None:
@@ -576,14 +604,24 @@ elif view == "Trọng điểm":
                 key=f"source_{cache_key}_{selected_index}",
             )
             if citation in segments:
-                st.write(segments[citation].text)
+                source_selection_key = (
+                    f"source_selection_{cache_key}_{selected_index}_{citation}"
+                )
+                selectable_transcript(
+                    [{"id": citation, "text": segments[citation].text}],
+                    key=source_selection_key,
+                    compact=True,
+                    height=340,
+                    on_ask_change=lambda key=source_selection_key: queue_selected_text(key),
+                )
                 st.caption(f":material/verified: Nguồn [{citation}] · trích nguyên văn")
 
 elif view == "Transcript":
     with st.container(border=True, key="transcript_panel"):
         st.markdown("## :material/article: Transcript buổi học")
         st.caption(
-            "Tìm theo khái niệm hoặc mã đoạn. Kết quả luôn giữ nguyên văn từ bài giảng."
+            "Tìm theo khái niệm hoặc mã đoạn. Bôi đen một phần trong cùng một đoạn, "
+            "sau đó chọn “Giải thích bằng AI”."
         )
         query = st.text_input(
             "Tìm trong transcript",
@@ -605,18 +643,27 @@ elif view == "Transcript":
             st.badge(f"{len(matches)} kết quả", color="blue")
             st.caption("Hiển thị tối đa 20 đoạn mỗi lượt")
 
-        with st.container(height=520, border=True):
-            for segment in matches[:20]:
-                st.markdown(f"#### [{segment.id}]")
-                st.write(segment.text)
-                st.space("small")
-            if not matches:
-                st.info(
-                    "Không tìm thấy đoạn phù hợp. Hãy thử một từ khoá ngắn hơn.",
-                    icon=":material/search_off:",
-                )
+        if matches:
+            transcript_selection_key = f"transcript_selection_{cache_key}"
+            selectable_transcript(
+                [
+                    {"id": segment.id, "text": segment.text}
+                    for segment in matches[:20]
+                ],
+                key=transcript_selection_key,
+                height=560,
+                on_ask_change=(
+                    lambda key=transcript_selection_key: queue_selected_text(key)
+                ),
+            )
+        else:
+            st.info(
+                "Không tìm thấy đoạn phù hợp. Hãy thử một từ khoá ngắn hơn.",
+                icon=":material/search_off:",
+            )
 
 else:
+    selection_request = st.session_state.pop("pending_selection", None)
     with st.container(border=True, key="chat_card"):
         with st.container(horizontal=True, vertical_alignment="center"):
             st.markdown("### :material/smart_toy: Hỏi về buổi học này")
@@ -680,23 +727,52 @@ else:
             submit_mode="disable",
         )
 
-    prompt = suggestion or (typed_question.strip() if typed_question else None)
+    prompt = (
+        selection_request
+        or suggestion
+        or (typed_question.strip() if typed_question else None)
+    )
     if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        selection_payload = prompt if isinstance(prompt, dict) else None
+        if selection_payload:
+            selected_text = selection_payload["text"]
+            selected_segment_id = selection_payload["segment_id"]
+            user_content = (
+                f"Giải thích phần đã bôi đen [{selected_segment_id}]:\n\n"
+                f"> {selected_text}"
+            )
+        else:
+            user_content = str(prompt)
+        st.session_state.messages.append({"role": "user", "content": user_content})
         try:
-            with st.status("Trợ lý đang trả lời…", expanded=False) as qa_status:
+            status_label = (
+                "Gemini đang giải thích phần bôi đen…"
+                if selection_payload
+                else "Trợ lý đang trả lời…"
+            )
+            with st.status(status_label, expanded=False) as qa_status:
                 def show_qa_attempt(attempt: int, total: int, slot: int) -> None:
                     qa_status.update(
                         label=f"Đang thử Gemini key slot {slot + 1} · {attempt}/{total}"
                     )
 
-                rotation = answer_with_key_rotation(
-                    path,
-                    prompt,
-                    api_keys,
-                    st.session_state.gemini_key_cursor,
-                    on_attempt=show_qa_attempt,
-                )
+                if selection_payload:
+                    rotation = explain_selection_with_key_rotation(
+                        path,
+                        selected_text,
+                        selected_segment_id,
+                        api_keys,
+                        st.session_state.gemini_key_cursor,
+                        on_attempt=show_qa_attempt,
+                    )
+                else:
+                    rotation = answer_with_key_rotation(
+                        path,
+                        str(prompt),
+                        api_keys,
+                        st.session_state.gemini_key_cursor,
+                        on_attempt=show_qa_attempt,
+                    )
                 result = rotation.value
                 st.session_state.gemini_key_cursor = rotation.next_cursor
                 st.session_state.last_key_slot = rotation.used_slot

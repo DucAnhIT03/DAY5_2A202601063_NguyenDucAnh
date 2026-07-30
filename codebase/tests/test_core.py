@@ -8,6 +8,8 @@ from codebase.core import (
     answer_question,
     answer_with_key_rotation,
     default_summary,
+    explain_selection,
+    explain_selection_with_key_rotation,
     load_segments,
     masked_key_label,
     normalize_confidence,
@@ -186,3 +188,28 @@ def test_overview_question_is_grounded_in_real_transcript_without_key(monkeypatc
     assert result["mode"] == "extractive"
     assert result["grounded"] is True
     assert result["citations"]
+
+
+def test_selected_transcript_text_keeps_its_exact_citation_without_key(monkeypatch):
+    segment = load_segments(TRANSCRIPT)[14]
+    selected_text = segment.text[20:140]
+    monkeypatch.setenv("GEMINI_API_KEY", "must-not-be-used")
+    rotated = explain_selection_with_key_rotation(
+        TRANSCRIPT,
+        selected_text,
+        segment.id,
+        [],
+    )
+    assert rotated.value["mode"] == "extractive"
+    assert rotated.value["citations"] == [segment.id]
+    assert rotated.used_slot is None
+
+
+def test_selected_text_must_belong_to_the_claimed_segment(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="không thuộc"):
+        explain_selection(
+            TRANSCRIPT,
+            "Nội dung không tồn tại trong transcript",
+            "T04-015",
+        )

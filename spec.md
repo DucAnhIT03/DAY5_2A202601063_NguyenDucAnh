@@ -34,7 +34,7 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 
 - **Lát cắt một câu:** Khi học viên mở một buổi mình đã bỏ lỡ, hệ thống chọn 3–5 điểm có căn cứ và đối chiếu quiz cũ để họ biết phần nào đọc trước, đồng thời luôn cho phép mở đúng đoạn transcript gốc.
 - **Non-goals:** không chạy mọi buổi; không thay transcript; không kết luận học viên đã hiểu; không sinh quiz; không trả lời ngoài buổi đang mở.
-- **Mức:** Working ở parser, điều hướng citation, guardrail, Gemini summary/Q&A và persistence MongoDB. Không có fallback/mock trong runtime. Khi chưa có phân tích Gemini, hệ thống chỉ trích xuất nguyên văn từ transcript thật và ghi rõ trạng thái. Data pack chưa cung cấp quiz thật nên hệ thống để trống quiz thay vì dùng câu mẫu.
+- **Mức:** Working ở parser, điều hướng citation, guardrail, Gemini summary/Q&A, giải thích phần transcript được bôi đen và persistence MongoDB. Không có fallback/mock trong runtime. Khi chưa có phân tích Gemini, hệ thống chỉ trích xuất nguyên văn từ transcript thật và ghi rõ trạng thái. Data pack chưa cung cấp quiz thật nên hệ thống để trống quiz thay vì dùng câu mẫu.
 - **Automation:** **Augment**. Sai trọng tâm có thể gây học sai/mất điểm; user quyết định sau khi xem trích dẫn, sửa rẻ hơn việc tin output không kiểm chứng.
 
 | Nguyên tắc | Vị trí cụ thể |
@@ -77,7 +77,7 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 - **Coverage:** pass khi output có 3–5 điểm, không chứa đoạn hoạt động lớp.
 - **Quality bar chốt:** ≥85% tổng case; 100% case nguồn sự thật phải pass; 0 citation bịa.
 - Golden set: `eval/golden-set.csv` (20 case, phủ đủ 4 lớp).
-- Unit test hiện tại: 17/17 pass. Đã chạy Gemini thật cho `transcript-04-clean.md`, lưu 4 trọng điểm có citation vào `catchup_assistant.analyses`; luồng chat đã được kiểm tra bằng một lời chào và một câu hỏi Gemini có citation. `TODO-NGƯỜI-THẬT`: chấm trọn golden set và ghi kết quả quan sát thật vào `eval/run-01.csv`.
+- Unit test hiện tại: 19/19 pass. Đã chạy Gemini thật cho `transcript-04-clean.md`, lưu 4 trọng điểm có citation vào `catchup_assistant.analyses`; luồng chat và luồng giải thích phần transcript được chọn đều đã được kiểm tra với Gemini và citation thật. `TODO-NGƯỜI-THẬT`: chấm trọn golden set và ghi kết quả quan sát thật vào `eval/run-01.csv`.
 
 ## §8. Phân công & kế hoạch
 
