@@ -5,7 +5,6 @@ try:
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
-        local_transcripts,
         masked_key_label,
         parse_api_keys,
         segment_map,
@@ -30,7 +29,6 @@ except ModuleNotFoundError:
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
-        local_transcripts,
         masked_key_label,
         parse_api_keys,
         segment_map,
@@ -117,13 +115,6 @@ st.html(
     """
 )
 
-FALLBACK_QUIZ_BANK = [
-    "Quan hệ giữa AI, machine learning, deep learning và generative AI là gì?",
-    "Vì sao symbolic AI chạm trần?",
-    "Deep learning khác feature engineering truyền thống ở điểm nào?",
-]
-
-
 @st.cache_resource
 def get_mongo_repository(uri: str, database: str) -> MongoTranscriptRepository:
     return MongoTranscriptRepository(uri, database)
@@ -141,14 +132,19 @@ try:
         load_mongo_data(mongo_uri(), mongo_database())
     )
     files = list(mongo_snapshot.transcripts)
-    quiz_questions = list(mongo_snapshot.quiz_questions) or FALLBACK_QUIZ_BANK
-    data_source = "mongodb"
+    quiz_questions = list(mongo_snapshot.quiz_questions)
 except MongoUnavailable as exc:
-    mongo_snapshot = None
     mongo_error = str(exc)
-    files = local_transcripts()
-    quiz_questions = FALLBACK_QUIZ_BANK
-    data_source = "local-fallback"
+    st.error(
+        f"{mongo_error} Ứng dụng yêu cầu MongoDB thật và không dùng dữ liệu fallback.",
+        icon=":material/database_off:",
+    )
+    st.code(
+        "docker compose up -d mongodb\n"
+        ".\\.venv\\Scripts\\python.exe scripts\\seed_mongodb.py",
+        language="powershell",
+    )
+    st.stop()
 
 if not files:
     st.error("Không có transcript nào để hiển thị.", icon=":material/database_off:")
@@ -164,9 +160,11 @@ except KeyVaultError as exc:
     initial_vault_error = str(exc)
 
 st.session_state.setdefault("messages", [])
-st.session_state.setdefault("summary_cache", {})
-st.session_state.setdefault("ai_generated_sessions", set())
-st.session_state.setdefault("gemini_api_keys_raw", "\n".join(persisted_api_keys))
+st.session_state.setdefault("gemini_api_keys_raw", "")
+if st.session_state.get("key_input_security_version") != 1:
+    # Xóa giá trị mà các bản cũ từng nạp vào widget; key đã nằm trong DPAPI vault.
+    st.session_state.gemini_api_keys_raw = ""
+    st.session_state.key_input_security_version = 1
 st.session_state.setdefault("gemini_key_cursor", 0)
 st.session_state.setdefault("last_key_slot", None)
 st.session_state.setdefault("key_vault_saved_count", len(persisted_api_keys))
@@ -188,19 +186,20 @@ def go_to_view(view_name: str) -> None:
 def reset_key_pool() -> None:
     st.session_state.gemini_key_cursor = 0
     st.session_state.last_key_slot = None
-    st.session_state.ai_generated_sessions = set()
 
 
 def persist_manual_key_pool() -> None:
     reset_key_pool()
     keys = parse_api_keys(st.session_state.get("gemini_api_keys_raw", ""))
+    if not keys:
+        return
     try:
-        if keys:
-            save_key_pool(keys)
-        else:
-            clear_key_pool()
+        save_key_pool(keys)
         st.session_state.key_vault_saved_count = len(keys)
         st.session_state.key_vault_error = None
+        # Không nạp ngược bí mật vào DOM sau khi đã lưu. Kho DPAPI mới là
+        # nguồn key đang hoạt động; ô này chỉ dùng để nhập một lần.
+        st.session_state.gemini_api_keys_raw = ""
     except KeyVaultError as exc:
         st.session_state.key_vault_error = str(exc)
 
@@ -219,15 +218,11 @@ def clear_persisted_key_pool() -> None:
 with st.sidebar:
     st.markdown("## :material/settings: Cài đặt")
     st.markdown("**Nguồn dữ liệu**")
-    if data_source == "mongodb":
-        st.success("MongoDB đang kết nối", icon=":material/database:")
-        st.caption(
-            f"`{mongo_snapshot.database}.{mongo_snapshot.collection}` · "
-            f"{len(files)} buổi · {mongo_snapshot.segment_count} đoạn"
-        )
-    else:
-        st.error("MongoDB chưa sẵn sàng", icon=":material/database_off:")
-        st.caption("Ứng dụng đang dùng file cục bộ dự phòng để không gián đoạn demo.")
+    st.success("MongoDB đang kết nối", icon=":material/database:")
+    st.caption(
+        f"`{mongo_snapshot.database}.{mongo_snapshot.collection}` · "
+        f"{len(files)} buổi · {mongo_snapshot.segment_count} đoạn thật"
+    )
     st.divider()
     st.markdown("**Nạp key hàng loạt**")
     uploaded_key_file = st.file_uploader(
@@ -271,25 +266,35 @@ with st.sidebar:
         max_chars=256 * 1024,
         key="gemini_api_keys_raw",
         placeholder="gemini-key-1\ngemini-key-2\ngemini-key-3",
-        help="Nhấn Enter để xuống dòng. Mỗi dòng tạo một slot trong pool.",
-        on_change=persist_manual_key_pool,
+        help="Nhấn Enter để xuống dòng, sau đó chọn Lưu danh sách key.",
+    )
+    st.button(
+        "Lưu danh sách key",
+        icon=":material/save:",
+        type="primary",
+        on_click=persist_manual_key_pool,
+        disabled=not bool(st.session_state.gemini_api_keys_raw.strip()),
+        use_container_width=True,
     )
     st.caption(
-        "Mỗi dòng đúng một key · tự bỏ dòng trống, comment bắt đầu bằng # và key trùng."
+        "Mỗi dòng đúng một key · tự bỏ dòng trống, comment bắt đầu bằng # và key trùng. "
+        "Sau khi lưu, ô nhập được xóa và key chỉ còn trong kho mã hóa."
     )
 
     combined_key_input = "\n".join(
         part
-        for part in (uploaded_key_text, st.session_state.gemini_api_keys_raw)
+        for part in (
+            "\n".join(persisted_api_keys),
+            uploaded_key_text,
+            st.session_state.gemini_api_keys_raw,
+        )
         if part
     )
     api_keys = configured_api_keys(combined_key_input)
-    manual_api_keys = parse_api_keys(st.session_state.gemini_api_keys_raw)
-    keys_to_persist = api_keys if uploaded_key_text else manual_api_keys
-    if keys_to_persist:
+    if uploaded_key_text:
         try:
-            save_key_pool(keys_to_persist)
-            st.session_state.key_vault_saved_count = len(keys_to_persist)
+            save_key_pool(api_keys)
+            st.session_state.key_vault_saved_count = len(api_keys)
             st.session_state.key_vault_error = None
         except KeyVaultError as exc:
             st.session_state.key_vault_error = str(exc)
@@ -317,7 +322,7 @@ with st.sidebar:
                 help="Xóa bản mã hóa cục bộ và làm trống vùng nhập trực tiếp.",
             )
     else:
-        st.info("Chưa có key · đang chạy demo", icon=":material/science:")
+        st.info("Chưa cấu hình Gemini", icon=":material/key_off:")
     if st.session_state.key_vault_error:
         st.warning(st.session_state.key_vault_error, icon=":material/lock_open:")
     st.markdown("**Nguyên tắc an toàn**")
@@ -331,14 +336,11 @@ api_keys = configured_api_keys(combined_key_input)
 with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
     st.markdown("### :material/school: VLearn · Catch-up")
     st.space("stretch")
-    if data_source == "mongodb":
-        st.badge(
-            f"MongoDB · {len(files)} buổi",
-            color="blue",
-            icon=":material/database:",
-        )
-    else:
-        st.badge("Dữ liệu dự phòng", color="orange", icon=":material/database_off:")
+    st.badge(
+        f"MongoDB thật · {len(files)} buổi",
+        color="blue",
+        icon=":material/database:",
+    )
     if api_keys:
         st.badge(
             f"Gemini pool · {len(api_keys)} key",
@@ -346,13 +348,7 @@ with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
             icon=":material/check_circle:",
         )
     else:
-        st.badge("AI demo · chưa có key", color="gray", icon=":material/science:")
-
-if mongo_error:
-    st.warning(
-        f"{mongo_error} Ứng dụng đang dùng file cục bộ dự phòng.",
-        icon=":material/database_off:",
-    )
+        st.badge("Gemini chưa cấu hình", color="gray", icon=":material/key_off:")
 
 with st.container(border=True, key="lesson_header"):
     st.caption("TRỢ LÝ BẮT KỊP BÀI HỌC")
@@ -372,10 +368,26 @@ with st.container(border=True, key="lesson_header"):
 path = next(p for p in files if p.name == selected_name)
 segments = segment_map(path)
 cache_key = path.name
-if cache_key not in st.session_state.summary_cache:
-    st.session_state.summary_cache[cache_key] = default_summary(path)
-
-summary = st.session_state.summary_cache[cache_key]
+repository = get_mongo_repository(mongo_uri(), mongo_database())
+try:
+    stored_analysis = repository.get_analysis(path)
+except MongoUnavailable as exc:
+    st.error(str(exc), icon=":material/database_off:")
+    st.stop()
+summary = stored_analysis["points"] if stored_analysis else default_summary(path)
+if not quiz_questions:
+    summary = [
+        {**point, "quiz": False, "quiz_reason": ""}
+        for point in summary
+    ]
+if not summary:
+    st.error("Transcript này chưa có đủ nội dung để tạo trọng điểm.", icon=":material/warning:")
+    st.stop()
+if not isinstance(st.session_state.point_selector, int) or not (
+    0 <= st.session_state.point_selector < len(summary)
+):
+    st.session_state.point_selector = 0
+summary_is_ai = stored_analysis is not None
 quiz_count = sum(bool(point.get("quiz")) for point in summary)
 
 analyze_requested = False
@@ -388,14 +400,29 @@ with st.container(horizontal=True, vertical_alignment="center", key="modebar"):
     )
     st.space("stretch")
     st.caption(f"{len(summary)} trọng điểm · {quiz_count} liên quan quiz · {len(segments)} đoạn transcript")
+    if summary_is_ai:
+        st.badge("Gemini thật · đã lưu MongoDB", color="green", icon=":material/verified:")
+    else:
+        st.badge("Trích xuất từ transcript thật", color="blue", icon=":material/article:")
     if api_keys:
-        already_analyzed = cache_key in st.session_state.ai_generated_sessions
         analyze_requested = st.button(
-            "Phân tích lại" if already_analyzed else "Phân tích bằng Gemini",
-            icon=":material/refresh:" if already_analyzed else ":material/auto_awesome:",
+            "Phân tích lại" if summary_is_ai else "Phân tích bằng Gemini",
+            icon=":material/refresh:" if summary_is_ai else ":material/auto_awesome:",
             help="Chỉ bắt đầu gọi Gemini khi bạn bấm nút này.",
-            type="secondary" if already_analyzed else "primary",
+            type="secondary" if summary_is_ai else "primary",
         )
+
+if summary_is_ai:
+    st.caption(
+        f":material/database: Kết quả từ `analyses` · "
+        f"{stored_analysis['model']} · {stored_analysis['generated_at']}"
+    )
+else:
+    st.info(
+        "Chưa có kết quả Gemini cho phiên bản transcript này. Các mục bên dưới là "
+        "trích đoạn tự động từ dữ liệu MongoDB thật, không phải nội dung AI giả lập.",
+        icon=":material/info:",
+    )
 
 if analyze_requested:
     try:
@@ -418,12 +445,19 @@ if analyze_requested:
                 st.session_state.gemini_key_cursor,
                 on_attempt=show_key_attempt,
             )
-            st.session_state.summary_cache[cache_key] = rotation.value
+            repository.save_analysis(
+                path,
+                rotation.value,
+                model="gemini-2.5-flash",
+                quiz_question_count=len(quiz_questions),
+            )
             st.session_state.gemini_key_cursor = rotation.next_cursor
             st.session_state.last_key_slot = rotation.used_slot
-            st.session_state.ai_generated_sessions.add(cache_key)
             analysis_status.update(
-                label=f"Hoàn tất bằng key slot {rotation.used_slot + 1}",
+                label=(
+                    f"Hoàn tất bằng key slot {rotation.used_slot + 1} · "
+                    "đã lưu MongoDB"
+                ),
                 state="complete",
                 expanded=False,
             )
@@ -460,7 +494,13 @@ if view == "Tổng quan":
         with st.container(border=True, key="quiz_panel"):
             st.markdown("#### :material/quiz: Nên ưu tiên cho quiz")
             quiz_points = [point for point in summary if point.get("quiz")]
-            if quiz_points:
+            if not quiz_questions:
+                st.info(
+                    "Chưa có ngân hàng quiz thật được cấp trong MongoDB, nên hệ thống "
+                    "không tự gắn nhãn quiz.",
+                    icon=":material/database_off:",
+                )
+            elif quiz_points:
                 for point in quiz_points:
                     st.markdown(f"- **{point['title']}**")
                     if point.get("quiz_reason"):
@@ -509,10 +549,17 @@ elif view == "Trọng điểm":
             with st.container(horizontal=True, vertical_alignment="center"):
                 if point.get("quiz"):
                     st.badge("Ưu tiên cho quiz", color="orange", icon=":material/quiz:")
-                st.badge(
-                    f"Tin cậy {point.get('confidence', 'chưa rõ')}",
-                    color="green" if point.get("confidence") == "cao" else "gray",
-                )
+                if point.get("origin") == "transcript-extractive":
+                    st.badge(
+                        "Trích trực tiếp transcript",
+                        color="blue",
+                        icon=":material/article:",
+                    )
+                else:
+                    st.badge(
+                        f"Tin cậy {point.get('confidence', 'chưa rõ')}",
+                        color="green" if point.get("confidence") == "cao" else "gray",
+                    )
             st.markdown(f"## {point['title']}")
             st.write(point["summary"])
             if point.get("quiz_reason"):

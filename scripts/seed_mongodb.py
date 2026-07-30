@@ -18,13 +18,6 @@ from codebase.mongo_repository import (  # noqa: E402
 )
 
 
-QUIZ_BANK = [
-    "Quan hệ giữa AI, machine learning, deep learning và generative AI là gì?",
-    "Vì sao symbolic AI chạm trần?",
-    "Deep learning khác feature engineering truyền thống ở điểm nào?",
-]
-
-
 def main() -> None:
     repository = MongoTranscriptRepository(mongo_uri(), mongo_database())
     repository.ping()
@@ -64,7 +57,9 @@ def main() -> None:
         {
             "$set": {
                 "schema_version": 1,
-                "questions": QUIZ_BANK,
+                "questions": [],
+                "source_status": "not-provided",
+                "note": "Chưa có ngân hàng quiz thật được phép sử dụng.",
                 "updated_at": now,
             },
             "$setOnInsert": {"created_at": now},

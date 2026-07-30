@@ -10,8 +10,10 @@ from codebase.core import (
     default_summary,
     load_segments,
     masked_key_label,
+    normalize_confidence,
     parse_api_keys,
     summarize_with_key_rotation,
+    transcript_fingerprint,
     transcript_from_path,
 )
 from codebase.mongo_repository import (
@@ -31,17 +33,20 @@ def test_parser_keeps_source_ids():
     assert segments[0].id == "T04-001"
 
 
-def test_demo_summary_has_three_to_five_grounded_points():
+def test_extractive_summary_uses_only_real_transcript_segments():
     valid = {segment.id for segment in load_segments(TRANSCRIPT)}
     summary = default_summary(TRANSCRIPT)
     assert 3 <= len(summary) <= 5
     assert all(set(item["citations"]) <= valid for item in summary)
+    assert all(item["origin"] == "transcript-extractive" for item in summary)
+    assert all(item["quiz"] is False for item in summary)
 
 
 def test_normalized_transcript_keeps_parsed_segments_in_memory():
     transcript = transcript_from_path(TRANSCRIPT)
     assert transcript.name == TRANSCRIPT.name
     assert load_segments(transcript)[0].id == "T04-001"
+    assert len(transcript_fingerprint(transcript)) == 64
 
 
 def test_mongo_document_is_mapped_to_a_grounded_transcript():
@@ -49,11 +54,13 @@ def test_mongo_document_is_mapped_to_a_grounded_transcript():
         {
             "name": "transcript-99-clean.md",
             "title": "Buổi kiểm thử",
+            "source_sha256": "abc123",
             "segments": [{"id": "T99-001", "text": "Nội dung có căn cứ."}],
         }
     )
     assert transcript.title == "Buổi kiểm thử"
     assert transcript.segments[0].id == "T99-001"
+    assert transcript.fingerprint == "abc123"
 
 
 def test_mongo_cache_payload_only_contains_pickle_safe_values():
@@ -68,6 +75,7 @@ def test_mongo_cache_payload_only_contains_pickle_safe_values():
     payload = pickle.loads(pickle.dumps(snapshot_to_cache_payload(snapshot)))
     restored = snapshot_from_cache_payload(payload)
     assert restored.transcripts[0].name == transcript.name
+    assert restored.transcripts[0].fingerprint == transcript.fingerprint
     assert restored.segment_count == len(transcript.segments)
 
 
@@ -83,6 +91,12 @@ def test_key_parser_deduplicates_and_masks():
     keys = parse_api_keys("alpha-key-12345, beta-key-67890; alpha-key-12345")
     assert keys == ["alpha-key-12345", "beta-key-67890"]
     assert masked_key_label(keys[0]) == "alph••••2345"
+
+
+def test_confidence_labels_are_normalized_for_vietnamese_ui():
+    assert normalize_confidence("high") == "cao"
+    assert normalize_confidence("medium") == "vừa"
+    assert normalize_confidence("low") == "thấp"
 
 
 def test_key_parser_accepts_one_key_per_line_and_comments():

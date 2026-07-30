@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -27,11 +28,12 @@ class Segment:
 
 @dataclass(frozen=True)
 class TranscriptDocument:
-    """Normalized transcript loaded from MongoDB or the local fallback pack."""
+    """Normalized transcript with a stable fingerprint of its real source."""
 
     name: str
     title: str
     segments: tuple[Segment, ...]
+    fingerprint: str = ""
 
 
 TranscriptSource: TypeAlias = Path | TranscriptDocument
@@ -52,50 +54,13 @@ class KeyPoolError(RuntimeError):
 AttemptCallback: TypeAlias = Callable[[int, int, int], None]
 
 
-DEMO_SUMMARIES: dict[str, list[dict[str, Any]]] = {
-    "transcript-04-clean.md": [
-        {
-            "title": "AI → machine learning → deep learning → generative AI",
-            "summary": "Các lớp nằm theo quan hệ tập con; generative AI là lớp trong cùng đứng sau các chatbot hiện đại.",
-            "citations": ["T04-015"],
-            "quiz": True,
-            "quiz_reason": "Quiz mẫu hỏi trực tiếp về quan hệ giữa bốn khái niệm.",
-            "confidence": "cao",
-        },
-        {
-            "title": "Symbolic AI chạm trần vì bùng nổ tổ hợp",
-            "summary": "Luật viết tay làm tốt tác vụ hẹp nhưng không thể bao phủ mọi bối cảnh và ngoại lệ của thế giới.",
-            "citations": ["T04-024", "T04-025", "T04-027"],
-            "quiz": True,
-            "quiz_reason": "Quiz mẫu hỏi giới hạn cốt lõi của symbolic AI.",
-            "confidence": "cao",
-        },
-        {
-            "title": "Hai mùa đông AI đến từ khoảng cách giữa kỳ vọng và điều kiện",
-            "summary": "Thiếu dữ liệu, phần cứng và khả năng duy trì luật khiến niềm tin và nguồn vốn nghiên cứu suy giảm.",
-            "citations": ["T04-022", "T04-023", "T04-029"],
-            "quiz": False,
-            "quiz_reason": "",
-            "confidence": "cao",
-        },
-        {
-            "title": "Deep learning tự học đặc trưng từ dữ liệu",
-            "summary": "Mạng neuron nhiều tầng giảm nhu cầu viết đặc trưng bằng tay, nhưng vẫn phụ thuộc mạnh vào dữ liệu chất lượng.",
-            "citations": ["T04-030", "T04-031", "T04-032"],
-            "quiz": True,
-            "quiz_reason": "Quiz mẫu đối chiếu feature engineering và deep learning.",
-            "confidence": "cao",
-        },
-    ]
-}
-
-
 def session_files() -> list[Path]:
     return sorted(TRANSCRIPT_DIR.glob("transcript-*-clean.md"))
 
 
 def transcript_from_path(path: Path) -> TranscriptDocument:
-    raw = path.read_text(encoding="utf-8")
+    raw_bytes = path.read_bytes()
+    raw = raw_bytes.decode("utf-8")
     title_line = next((line for line in raw.splitlines() if line.startswith("# ")), path.stem)
     return TranscriptDocument(
         name=path.name,
@@ -104,6 +69,7 @@ def transcript_from_path(path: Path) -> TranscriptDocument:
             Segment(segment_id, re.sub(r"\s+", " ", text).strip())
             for segment_id, text in SEGMENT_RE.findall(raw)
         ),
+        fingerprint=hashlib.sha256(raw_bytes).hexdigest(),
     )
 
 
@@ -125,9 +91,17 @@ def segment_map(source: TranscriptSource) -> dict[str, Segment]:
     return {segment.id: segment for segment in load_segments(source)}
 
 
+def transcript_fingerprint(source: TranscriptSource) -> str:
+    if isinstance(source, TranscriptDocument) and source.fingerprint:
+        return source.fingerprint
+    if isinstance(source, Path):
+        return hashlib.sha256(source.read_bytes()).hexdigest()
+    payload = "\n".join(f"{segment.id}:{segment.text}" for segment in source.segments)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def default_summary(source: TranscriptSource) -> list[dict[str, Any]]:
-    if source.name in DEMO_SUMMARIES:
-        return DEMO_SUMMARIES[source.name]
+    """Build a grounded extractive preview directly from the real transcript."""
     segments = [
         s for s in load_segments(source)
         if len(s.text) > 180 and "[Hoạt động lớp:" not in s.text
@@ -138,11 +112,12 @@ def default_summary(source: TranscriptSource) -> list[dict[str, Any]]:
             "title": s.text.split(".")[0][:90],
             "summary": s.text[:260] + ("…" if len(s.text) > 260 else ""),
             "citations": [s.id],
-            "quiz": index == 0,
-            "quiz_reason": "Cần đối chiếu lại với ngân hàng quiz của khoá.",
+            "quiz": False,
+            "quiz_reason": "",
             "confidence": "thấp",
+            "origin": "transcript-extractive",
         }
-        for index, s in enumerate(picks)
+        for s in picks
     ]
 
 
@@ -186,6 +161,20 @@ def masked_key_label(key: str) -> str:
     if len(key) < 9:
         return "••••••••"
     return f"{key[:4]}••••{key[-4:]}"
+
+
+def normalize_confidence(value: Any) -> str:
+    """Normalize provider variants to the three Vietnamese UI labels."""
+    normalized = str(value or "").strip().lower()
+    return {
+        "high": "cao",
+        "cao": "cao",
+        "medium": "vừa",
+        "moderate": "vừa",
+        "vừa": "vừa",
+        "low": "thấp",
+        "thấp": "thấp",
+    }.get(normalized, "chưa rõ")
 
 
 def _is_retryable_provider_error(error: Exception) -> bool:
@@ -264,15 +253,21 @@ def summarize_with_gemini(
 ) -> list[dict[str, Any]]:
     segments = load_segments(source)
     context = "\n".join(f"[{s.id}] {s.text}" for s in segments)
+    quiz_context = (
+        json.dumps(quiz_questions, ensure_ascii=False)
+        if quiz_questions
+        else "KHÔNG CÓ NGÂN HÀNG QUIZ ĐƯỢC CẤP"
+    )
     prompt = f"""Bạn là Catch-up Assistant. Chỉ dùng transcript bên dưới.
 Trả về JSON array gồm đúng 3-5 object với keys:
 title, summary, citations (mã đoạn có thật), quiz (boolean),
 quiz_reason (chỉ nêu khi câu hỏi quiz thực sự khớp), confidence (cao/vừa/thấp).
 Ưu tiên khái niệm, lập luận, ví dụ quan trọng; bỏ chuyển ý, hành chính, hỏi đáp ngoài lề.
 Không thêm kiến thức ngoài nguồn. Một ý chỉ được confidence cao khi mọi mệnh đề có căn cứ.
+Nếu không có ngân hàng quiz được cấp, bắt buộc đặt quiz=false và quiz_reason="" cho mọi ý.
 
 QUIZ CŨ:
-{json.dumps(quiz_questions, ensure_ascii=False)}
+{quiz_context}
 
 TRANSCRIPT:
 {context}
@@ -285,6 +280,11 @@ TRANSCRIPT:
         item["citations"] = [c for c in item.get("citations", []) if c in valid_ids]
         if not item["citations"]:
             raise ValueError("AI trả về điểm chính không có trích dẫn hợp lệ.")
+        if not quiz_questions:
+            item["quiz"] = False
+            item["quiz_reason"] = ""
+        item["confidence"] = normalize_confidence(item.get("confidence"))
+        item["origin"] = "gemini"
     log_trace("summary", source.name, {"count": len(result), "model": "gemini-2.5-flash"})
     return result[:5]
 
@@ -326,10 +326,10 @@ def answer_question(
     if not ai_available(api_key):
         best = relevant[0]
         return {
-            "answer": f"Chế độ demo chỉ tìm đoạn liên quan, chưa diễn giải bằng AI: “{best.text[:420]}{'…' if len(best.text) > 420 else ''}”",
+            "answer": f"Chưa gọi Gemini; đây là đoạn transcript thật liên quan nhất: “{best.text[:420]}{'…' if len(best.text) > 420 else ''}”",
             "citations": [best.id],
             "grounded": True,
-            "mode": "demo",
+            "mode": "extractive",
         }
 
     context = "\n".join(f"[{s.id}] {s.text}" for s in relevant)

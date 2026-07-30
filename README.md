@@ -16,11 +16,11 @@ python -m venv .venv
 .\.venv\Scripts\streamlit.exe run codebase\streamlit_app.py
 ```
 
-Lệnh seed dùng **upsert**, có thể chạy lại an toàn. App đọc trực tiếp collection
-`catchup_assistant.transcripts` và `catchup_assistant.quiz_bank`; badge màu xanh
-`MongoDB · 6 buổi` trên giao diện xác nhận nguồn dữ liệu thật đang hoạt động.
-Nếu MongoDB tạm mất kết nối, app hiển thị cảnh báo rõ ràng và dùng file cục bộ dự
-phòng để buổi demo không bị gián đoạn.
+Lệnh seed dùng **upsert**, có thể chạy lại an toàn. App đọc trực tiếp các collection
+`catchup_assistant.transcripts`, `catchup_assistant.quiz_bank` và
+`catchup_assistant.analyses`; badge màu xanh `MongoDB thật · 6 buổi` xác nhận nguồn
+dữ liệu đang hoạt động. MongoDB là bắt buộc: nếu mất kết nối, app dừng với hướng dẫn
+khởi động database và tuyệt đối không tráo sang dữ liệu fallback.
 
 Có thể đổi kết nối qua biến môi trường (xem `.env.example`):
 
@@ -42,6 +42,15 @@ key-3
 
 Pool sử dụng round-robin sau mỗi request. Việc dán/nạp key **không tự gọi AI**; bấm **Phân tích bằng Gemini** khi muốn chạy. Trong lúc chạy, giao diện hiển thị slot và tiến độ thử key. Nếu một key gặp lỗi quota token/rate-limit (`429`/`RESOURCE_EXHAUSTED`), key lỗi hoặc provider `5xx`, hệ thống tự chạy lại toàn bộ request bằng slot tiếp theo; mỗi request có timeout để không chờ vô hạn. Lời gọi Gemini là non-streaming nên output dở dang không được đưa ra UI; người dùng chỉ thấy kết quả hoàn chỉnh. Lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
 
+Kết quả Gemini chỉ được lưu vào `analyses` sau khi có 3–5 trọng điểm và mọi citation
+đều tồn tại trong đúng transcript. Bản ghi gắn fingerprint SHA-256 của transcript;
+khi nguồn thay đổi, phân tích cũ không được tái sử dụng. Có thể tạo/làm mới phân tích
+thật bằng giao diện hoặc CLI:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\generate_analysis.py --session transcript-04-clean.md
+```
+
 Bạn cũng có thể cấu hình key bằng biến môi trường:
 
 ```powershell
@@ -58,7 +67,10 @@ $env:GEMINI_API_KEYS="key-1,key-2,key-3"
 
 Không commit key hoặc `.streamlit/secrets.toml`. Trace AI thật được ghi cục bộ tại `codebase/logs/ai-trace.jsonl` và đã gitignore; trước khi nộp chỉ đưa trace tối thiểu không chứa transcript dài hay secret.
 
-Nếu chưa có key, app chạy **demo có kiểm soát** và gắn nhãn rõ; đây không được tính là lời gọi AI thật trong rubric.
+Nếu chưa có kết quả Gemini, app chỉ hiển thị bản **trích xuất trực tiếp từ transcript
+MongoDB thật** và ghi rõ “chưa phân tích AI”; không có summary hard-code. Data pack
+không cung cấp ngân hàng quiz thật nên collection quiz hiện để trống và UI không tự
+gắn nhãn quiz. Chỉ nhập quiz khi có nguồn được phép sử dụng.
 
 ## Kiểm thử
 
@@ -88,7 +100,8 @@ Nếu chưa có key, app chạy **demo có kiểm soát** và gắn nhãn rõ; �
 
 > Trưởng nhóm Nguyễn Đức Anh phụ trách phần lớn khối lượng và toàn bộ hạng mục cốt lõi; các thành viên còn lại hỗ trợ theo đầu việc được giao. Cả 5 thành viên cùng review sản phẩm và tham gia phần trình bày/Q&A.
 
-Các mục cần dữ liệu người thật hoặc API key được đánh dấu `TODO-NGƯỜI-THẬT` / `TODO-AI-KEY`; không có số liệu hay trace giả.
+Các mục cần validation từ người học thật vẫn được đánh dấu `TODO-NGƯỜI-THẬT`;
+runtime hiện dùng transcript MongoDB và đã có lời gọi Gemini thật, không có output giả.
 
 ## Tài liệu đề bài gốc
 
