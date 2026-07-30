@@ -4,12 +4,29 @@ Prototype giúp học viên mở một buổi đã bỏ lỡ và nhận 3–5 đ
 
 ## Chạy dự án
 
-Yêu cầu Python 3.11+:
+Yêu cầu Docker Desktop và Python 3.11+. Dữ liệu ứng dụng được lưu thật trong
+MongoDB chạy bằng Docker; cổng `27020` chỉ bind vào `127.0.0.1` để không lộ
+database ra mạng ngoài.
 
 ```powershell
+docker compose up -d mongodb
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe scripts\seed_mongodb.py
 .\.venv\Scripts\streamlit.exe run codebase\streamlit_app.py
+```
+
+Lệnh seed dùng **upsert**, có thể chạy lại an toàn. App đọc trực tiếp collection
+`catchup_assistant.transcripts` và `catchup_assistant.quiz_bank`; badge màu xanh
+`MongoDB · 6 buổi` trên giao diện xác nhận nguồn dữ liệu thật đang hoạt động.
+Nếu MongoDB tạm mất kết nối, app hiển thị cảnh báo rõ ràng và dùng file cục bộ dự
+phòng để buổi demo không bị gián đoạn.
+
+Có thể đổi kết nối qua biến môi trường (xem `.env.example`):
+
+```powershell
+$env:MONGO_URI="mongodb://127.0.0.1:27020"
+$env:MONGO_DATABASE="catchup_assistant"
 ```
 
 Mở `http://localhost:8501`. Trong sidebar, tải lên file `.txt` tại **Nạp key hàng loạt**. Mỗi dòng chứa đúng một Gemini API key; dòng trống và comment bắt đầu bằng `#` được bỏ qua:

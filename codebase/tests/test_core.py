@@ -9,7 +9,9 @@ from codebase.core import (
     masked_key_label,
     parse_api_keys,
     summarize_with_key_rotation,
+    transcript_from_path,
 )
+from codebase.mongo_repository import document_to_transcript
 
 
 TRANSCRIPT = Path("data/vlearn-pack/transcript/transcript-04-clean.md")
@@ -26,6 +28,24 @@ def test_demo_summary_has_three_to_five_grounded_points():
     summary = default_summary(TRANSCRIPT)
     assert 3 <= len(summary) <= 5
     assert all(set(item["citations"]) <= valid for item in summary)
+
+
+def test_normalized_transcript_keeps_parsed_segments_in_memory():
+    transcript = transcript_from_path(TRANSCRIPT)
+    assert transcript.name == TRANSCRIPT.name
+    assert load_segments(transcript)[0].id == "T04-001"
+
+
+def test_mongo_document_is_mapped_to_a_grounded_transcript():
+    transcript = document_to_transcript(
+        {
+            "name": "transcript-99-clean.md",
+            "title": "Buổi kiểm thử",
+            "segments": [{"id": "T99-001", "text": "Nội dung có căn cứ."}],
+        }
+    )
+    assert transcript.title == "Buổi kiểm thử"
+    assert transcript.segments[0].id == "T99-001"
 
 
 def test_out_of_scope_question_is_refused_without_api_key(monkeypatch):

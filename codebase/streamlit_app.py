@@ -5,20 +5,32 @@ try:
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
+        local_transcripts,
         masked_key_label,
         segment_map,
-        session_files,
         summarize_with_key_rotation,
+    )
+    from codebase.mongo_repository import (
+        MongoTranscriptRepository,
+        MongoUnavailable,
+        mongo_database,
+        mongo_uri,
     )
 except ModuleNotFoundError:
     from core import (
         answer_with_key_rotation,
         configured_api_keys,
         default_summary,
+        local_transcripts,
         masked_key_label,
         segment_map,
-        session_files,
         summarize_with_key_rotation,
+    )
+    from mongo_repository import (
+        MongoTranscriptRepository,
+        MongoUnavailable,
+        mongo_database,
+        mongo_uri,
     )
 
 
@@ -87,17 +99,41 @@ st.html(
     """
 )
 
-QUIZ_BANK = [
+FALLBACK_QUIZ_BANK = [
     "Quan hệ giữa AI, machine learning, deep learning và generative AI là gì?",
     "Vì sao symbolic AI chạm trần?",
     "Deep learning khác feature engineering truyền thống ở điểm nào?",
 ]
 
-files = session_files()
-labels = {
-    path.name: path.read_text(encoding="utf-8").splitlines()[0].replace("# ", "")
-    for path in files
-}
+
+@st.cache_resource
+def get_mongo_repository(uri: str, database: str) -> MongoTranscriptRepository:
+    return MongoTranscriptRepository(uri, database)
+
+
+@st.cache_data(ttl="30s", max_entries=4)
+def load_mongo_data(uri: str, database: str):
+    return get_mongo_repository(uri, database).snapshot()
+
+
+mongo_error = None
+try:
+    mongo_snapshot = load_mongo_data(mongo_uri(), mongo_database())
+    files = list(mongo_snapshot.transcripts)
+    quiz_questions = list(mongo_snapshot.quiz_questions) or FALLBACK_QUIZ_BANK
+    data_source = "mongodb"
+except MongoUnavailable as exc:
+    mongo_snapshot = None
+    mongo_error = str(exc)
+    files = local_transcripts()
+    quiz_questions = FALLBACK_QUIZ_BANK
+    data_source = "local-fallback"
+
+if not files:
+    st.error("Không có transcript nào để hiển thị.", icon=":material/database_off:")
+    st.stop()
+
+labels = {transcript.name: transcript.title for transcript in files}
 
 st.session_state.setdefault("messages", [])
 st.session_state.setdefault("summary_cache", {})
@@ -127,6 +163,17 @@ def reset_key_pool() -> None:
 
 with st.sidebar:
     st.markdown("## :material/settings: Cài đặt")
+    st.markdown("**Nguồn dữ liệu**")
+    if data_source == "mongodb":
+        st.success("MongoDB đang kết nối", icon=":material/database:")
+        st.caption(
+            f"`{mongo_snapshot.database}.{mongo_snapshot.collection}` · "
+            f"{len(files)} buổi · {mongo_snapshot.segment_count} đoạn"
+        )
+    else:
+        st.error("MongoDB chưa sẵn sàng", icon=":material/database_off:")
+        st.caption("Ứng dụng đang dùng file cục bộ dự phòng để không gián đoạn demo.")
+    st.divider()
     st.markdown("**Nạp key hàng loạt**")
     uploaded_key_file = st.file_uploader(
         "File Gemini key (.txt)",
@@ -187,6 +234,14 @@ api_keys = configured_api_keys(combined_key_input)
 with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
     st.markdown("### :material/school: VLearn · Catch-up")
     st.space("stretch")
+    if data_source == "mongodb":
+        st.badge(
+            f"MongoDB · {len(files)} buổi",
+            color="blue",
+            icon=":material/database:",
+        )
+    else:
+        st.badge("Dữ liệu dự phòng", color="orange", icon=":material/database_off:")
     if api_keys:
         st.badge(
             f"Gemini pool · {len(api_keys)} key",
@@ -194,7 +249,13 @@ with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
             icon=":material/check_circle:",
         )
     else:
-        st.badge("Dữ liệu demo", color="gray", icon=":material/science:")
+        st.badge("AI demo · chưa có key", color="gray", icon=":material/science:")
+
+if mongo_error:
+    st.warning(
+        f"{mongo_error} Ứng dụng đang dùng file cục bộ dự phòng.",
+        icon=":material/database_off:",
+    )
 
 with st.container(border=True, key="lesson_header"):
     st.caption("TRỢ LÝ BẮT KỊP BÀI HỌC")
@@ -222,7 +283,7 @@ if api_keys and cache_key not in st.session_state.ai_generated_sessions:
         with st.spinner("Đang đọc transcript và đối chiếu quiz…"):
             rotation = summarize_with_key_rotation(
                 path,
-                QUIZ_BANK,
+                quiz_questions,
                 api_keys,
                 st.session_state.gemini_key_cursor,
             )
@@ -256,7 +317,7 @@ with st.container(horizontal=True, vertical_alignment="center", key="modebar"):
             with st.spinner("Đang phân tích lại…"):
                 rotation = summarize_with_key_rotation(
                     path,
-                    QUIZ_BANK,
+                    quiz_questions,
                     api_keys,
                     st.session_state.gemini_key_cursor,
                 )

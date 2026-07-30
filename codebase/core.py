@@ -6,7 +6,7 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, TypeAlias
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +23,18 @@ STOPWORDS = {
 class Segment:
     id: str
     text: str
+
+
+@dataclass(frozen=True)
+class TranscriptDocument:
+    """Normalized transcript loaded from MongoDB or the local fallback pack."""
+
+    name: str
+    title: str
+    segments: tuple[Segment, ...]
+
+
+TranscriptSource: TypeAlias = Path | TranscriptDocument
 
 
 @dataclass(frozen=True)
@@ -79,23 +91,42 @@ def session_files() -> list[Path]:
     return sorted(TRANSCRIPT_DIR.glob("transcript-*-clean.md"))
 
 
-def load_segments(path: Path) -> list[Segment]:
+def transcript_from_path(path: Path) -> TranscriptDocument:
     raw = path.read_text(encoding="utf-8")
+    title_line = next((line for line in raw.splitlines() if line.startswith("# ")), path.stem)
+    return TranscriptDocument(
+        name=path.name,
+        title=title_line.removeprefix("# ").strip(),
+        segments=tuple(
+            Segment(segment_id, re.sub(r"\s+", " ", text).strip())
+            for segment_id, text in SEGMENT_RE.findall(raw)
+        ),
+    )
+
+
+def local_transcripts() -> list[TranscriptDocument]:
+    return [transcript_from_path(path) for path in session_files()]
+
+
+def load_segments(source: TranscriptSource) -> list[Segment]:
+    if isinstance(source, TranscriptDocument):
+        return list(source.segments)
+    raw = source.read_text(encoding="utf-8")
     return [
         Segment(segment_id, re.sub(r"\s+", " ", text).strip())
         for segment_id, text in SEGMENT_RE.findall(raw)
     ]
 
 
-def segment_map(path: Path) -> dict[str, Segment]:
-    return {segment.id: segment for segment in load_segments(path)}
+def segment_map(source: TranscriptSource) -> dict[str, Segment]:
+    return {segment.id: segment for segment in load_segments(source)}
 
 
-def default_summary(path: Path) -> list[dict[str, Any]]:
-    if path.name in DEMO_SUMMARIES:
-        return DEMO_SUMMARIES[path.name]
+def default_summary(source: TranscriptSource) -> list[dict[str, Any]]:
+    if source.name in DEMO_SUMMARIES:
+        return DEMO_SUMMARIES[source.name]
     segments = [
-        s for s in load_segments(path)
+        s for s in load_segments(source)
         if len(s.text) > 180 and "[Hoạt động lớp:" not in s.text
     ]
     picks = segments[:: max(1, len(segments) // 4)][:4]
@@ -201,13 +232,13 @@ def _extract_json(text: str) -> Any:
 
 
 def summarize_with_gemini(
-    path: Path,
+    source: TranscriptSource,
     quiz_questions: list[str],
     api_key: str | None = None,
 ) -> list[dict[str, Any]]:
     from google import genai
 
-    segments = load_segments(path)
+    segments = load_segments(source)
     context = "\n".join(f"[{s.id}] {s.text}" for s in segments)
     prompt = f"""Bạn là Catch-up Assistant. Chỉ dùng transcript bên dưới.
 Trả về JSON array gồm đúng 3-5 object với keys:
@@ -230,16 +261,16 @@ TRANSCRIPT:
         item["citations"] = [c for c in item.get("citations", []) if c in valid_ids]
         if not item["citations"]:
             raise ValueError("AI trả về điểm chính không có trích dẫn hợp lệ.")
-    log_trace("summary", path.name, {"count": len(result), "model": "gemini-2.5-flash"})
+    log_trace("summary", source.name, {"count": len(result), "model": "gemini-2.5-flash"})
     return result[:5]
 
 
 def answer_question(
-    path: Path,
+    source: TranscriptSource,
     question: str,
     api_key: str | None = None,
 ) -> dict[str, Any]:
-    segments = load_segments(path)
+    segments = load_segments(source)
     tokens = {
         token for token in re.findall(r"\w{3,}", question.lower(), re.UNICODE)
         if token not in STOPWORDS
@@ -294,39 +325,39 @@ CONTEXT:
     citations = [c for c in data.get("citations", []) if c in valid_ids]
     if not citations:
         return {"answer": "Mình chưa tìm thấy căn cứ đủ rõ trong transcript buổi này.", "citations": [], "grounded": False, "mode": "ai"}
-    log_trace("qa", path.name, {"question": question, "citations": citations, "model": "gemini-2.5-flash"})
+    log_trace("qa", source.name, {"question": question, "citations": citations, "model": "gemini-2.5-flash"})
     return {"answer": data["answer"], "citations": citations, "grounded": True, "mode": "ai"}
 
 
 def summarize_with_key_rotation(
-    path: Path,
+    source: TranscriptSource,
     quiz_questions: list[str],
     api_keys: list[str],
     cursor: int = 0,
 ) -> RotationResult:
     return _run_with_rotation(
-        lambda key: summarize_with_gemini(path, quiz_questions, key),
+        lambda key: summarize_with_gemini(source, quiz_questions, key),
         api_keys,
         cursor,
     )
 
 
 def answer_with_key_rotation(
-    path: Path,
+    source: TranscriptSource,
     question: str,
     api_keys: list[str],
     cursor: int = 0,
 ) -> RotationResult:
     if not api_keys:
         return RotationResult(
-            value=answer_question(path, question),
+            value=answer_question(source, question),
             next_cursor=cursor,
             used_slot=None,
             attempts=0,
         )
 
     result = _run_with_rotation(
-        lambda key: answer_question(path, question, key),
+        lambda key: answer_question(source, question, key),
         api_keys,
         cursor,
     )
