@@ -1,2 +1,1 @@
-"""Catch-up Assistant prototype."""
-
+"""taphoammo learning assistant."""

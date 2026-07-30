@@ -58,8 +58,12 @@ except ModuleNotFoundError:
     from selection_component import selectable_transcript
 
 
+BRAND_NAME = "taphoammo"
+AI_DISPLAY_NAME = f"{BRAND_NAME} AI"
+
+
 st.set_page_config(
-    page_title="Catch-up Assistant · VLearn",
+    page_title=f"{BRAND_NAME} · Trợ lý học tập",
     page_icon=":material/school:",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -315,9 +319,9 @@ with st.sidebar:
         f"{len(files)} buổi · {mongo_snapshot.segment_count} đoạn thật"
     )
     st.divider()
-    st.markdown("**Nạp key hàng loạt**")
+    st.markdown(f"**API cho {AI_DISPLAY_NAME}**")
     uploaded_key_file = st.file_uploader(
-        "File Gemini key (.txt)",
+        f"File Gemini API key cho {AI_DISPLAY_NAME} (.txt)",
         type=["txt"],
         key="gemini_key_file",
         on_change=reset_key_pool,
@@ -413,7 +417,7 @@ with st.sidebar:
                 help="Xóa bản mã hóa cục bộ và làm trống vùng nhập trực tiếp.",
             )
     else:
-        st.info("Chưa cấu hình Gemini", icon=":material/key_off:")
+        st.info(f"Chưa cấu hình {AI_DISPLAY_NAME}", icon=":material/key_off:")
     if st.session_state.key_vault_error:
         st.warning(st.session_state.key_vault_error, icon=":material/lock_open:")
     st.markdown("**Nguyên tắc an toàn**")
@@ -425,7 +429,7 @@ with st.sidebar:
 api_keys = configured_api_keys(combined_key_input)
 
 with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
-    st.markdown("### :material/school: VLearn · Catch-up")
+    st.markdown(f"### :material/school: {BRAND_NAME}")
     st.space("stretch")
     st.badge(
         f"MongoDB thật · {len(files)} buổi",
@@ -434,17 +438,24 @@ with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
     )
     if api_keys:
         st.badge(
-            f"Gemini pool · {len(api_keys)} key",
+            f"{AI_DISPLAY_NAME} · {len(api_keys)} key",
             color="green",
             icon=":material/check_circle:",
         )
     else:
-        st.badge("Gemini chưa cấu hình", color="gray", icon=":material/key_off:")
+        st.badge(
+            f"{AI_DISPLAY_NAME} chưa cấu hình",
+            color="gray",
+            icon=":material/key_off:",
+        )
 
 with st.container(border=True, key="lesson_header"):
-    st.caption("TRỢ LÝ BẮT KỊP BÀI HỌC")
+    st.caption("TAPHOAMMO · TRỢ LÝ BẮT KỊP BÀI HỌC")
     st.title("Hôm nay bạn muốn bắt kịp buổi nào?")
-    st.write("Chọn một buổi. Trợ lý sẽ chỉ giữ lại phần cần đọc trước và dẫn về đúng nguồn.")
+    st.write(
+        f"Chọn một buổi. {AI_DISPLAY_NAME} sẽ chỉ giữ lại phần cần đọc trước "
+        "và dẫn về đúng nguồn."
+    )
     selected_name = st.selectbox(
         "Buổi học đã bỏ lỡ",
         options=[p.name for p in files],
@@ -485,21 +496,25 @@ analyze_requested = False
 with st.container(horizontal=True, vertical_alignment="center", key="modebar"):
     view = st.segmented_control(
         "Khu vực",
-        ["Tổng quan", "Trọng điểm", "Transcript", "Hỏi trợ lý"],
+        ["Tổng quan", "Trọng điểm", "Transcript", f"Hỏi {AI_DISPLAY_NAME}"],
         key="active_view",
         label_visibility="collapsed",
     )
     st.space("stretch")
     st.caption(f"{len(summary)} trọng điểm · {quiz_count} liên quan quiz · {len(segments)} đoạn transcript")
     if summary_is_ai:
-        st.badge("Gemini thật · đã lưu MongoDB", color="green", icon=":material/verified:")
+        st.badge(
+            f"{AI_DISPLAY_NAME} · đã lưu MongoDB",
+            color="green",
+            icon=":material/verified:",
+        )
     else:
         st.badge("Trích xuất từ transcript thật", color="blue", icon=":material/article:")
     if api_keys:
         analyze_requested = st.button(
-            "Phân tích lại" if summary_is_ai else "Phân tích bằng Gemini",
+            "Phân tích lại" if summary_is_ai else f"Phân tích bằng {AI_DISPLAY_NAME}",
             icon=":material/refresh:" if summary_is_ai else ":material/auto_awesome:",
-            help="Chỉ bắt đầu gọi Gemini khi bạn bấm nút này.",
+            help=f"Chỉ bắt đầu gọi {AI_DISPLAY_NAME} khi bạn bấm nút này.",
             type="secondary" if summary_is_ai else "primary",
         )
 
@@ -510,14 +525,17 @@ if summary_is_ai:
     )
 else:
     st.info(
-        "Chưa có kết quả Gemini cho phiên bản transcript này. Các mục bên dưới là "
+        f"Chưa có kết quả {AI_DISPLAY_NAME} cho phiên bản transcript này. "
+        "Các mục bên dưới là "
         "trích đoạn tự động từ dữ liệu MongoDB thật, không phải nội dung AI giả lập.",
         icon=":material/info:",
     )
 
 if analyze_requested:
     try:
-        with st.status("Đang phân tích bằng Gemini…", expanded=True) as analysis_status:
+        with st.status(
+            f"{AI_DISPLAY_NAME} đang phân tích…", expanded=True
+        ) as analysis_status:
             attempt_progress = st.progress(0, text="Đang chuẩn bị request…")
 
             def show_key_attempt(attempt: int, total: int, slot: int) -> None:
@@ -554,13 +572,13 @@ if analyze_requested:
             )
         st.rerun()
     except Exception as exc:
-        st.error(f"Không thể gọi Gemini: {exc}")
+        st.error(f"{AI_DISPLAY_NAME} chưa thể xử lý yêu cầu: {exc}")
 
 if view == "Tổng quan":
     main_col, quiz_col = st.columns([1.35, 1], gap="large")
     with main_col:
         with st.container(border=True, key="overview_main"):
-            st.caption("BẢN ĐỒ CATCH-UP")
+            st.caption("BẢN ĐỒ TAPHOAMMO")
             st.markdown(f"## {len(summary)} điều cần nắm trong buổi này")
             st.write(
                 "Bắt đầu từ các trọng điểm bên dưới. Mỗi ý đều có đoạn transcript "
@@ -613,7 +631,7 @@ if view == "Tổng quan":
     with steps[2].container(border=True):
         st.badge("3", color="blue")
         st.markdown("**Hỏi điều còn vướng**")
-        st.caption("Trợ lý chỉ trả lời khi có căn cứ.")
+        st.caption(f"{AI_DISPLAY_NAME} chỉ trả lời khi có căn cứ.")
 
 elif view == "Trọng điểm":
     outline_col, detail_col = st.columns([.82, 1.65], gap="large")
@@ -692,7 +710,8 @@ elif view == "Transcript":
         st.markdown("## :material/article: Transcript buổi học")
         st.caption(
             "Tìm theo khái niệm hoặc mã đoạn. Bôi đen một phần trong cùng một đoạn, "
-            "sau đó chọn “Giải thích bằng AI”; câu trả lời sẽ hiện ngay dưới đoạn đó."
+            f"sau đó chọn “Giải thích bằng {AI_DISPLAY_NAME}”; "
+            "câu trả lời sẽ hiện ngay dưới đoạn đó."
         )
         query = st.text_input(
             "Tìm trong transcript",
@@ -744,11 +763,11 @@ elif view == "Transcript":
 else:
     with st.container(border=True, key="chat_card"):
         with st.container(horizontal=True, vertical_alignment="center"):
-            st.markdown("### :material/smart_toy: Hỏi về buổi học này")
+            st.markdown(f"### :material/smart_toy: Hỏi {AI_DISPLAY_NAME}")
             st.space("stretch")
             if api_keys:
                 st.badge(
-                    "Gemini sẵn sàng",
+                    f"{AI_DISPLAY_NAME} sẵn sàng",
                     color="green",
                     icon=":material/auto_awesome:",
                 )
@@ -759,12 +778,12 @@ else:
                 st.rerun()
         if api_keys:
             st.caption(
-                "Hỏi trực tiếp tại đây để gọi Gemini; không cần phân tích buổi học trước. "
-                "Trợ lý chỉ dùng transcript đang mở và luôn dẫn nguồn khi trả lời."
+                f"Hỏi trực tiếp {AI_DISPLAY_NAME} tại đây; không cần phân tích buổi học trước. "
+                f"{AI_DISPLAY_NAME} chỉ dùng transcript đang mở và luôn dẫn nguồn khi trả lời."
             )
         else:
             st.caption(
-                "Chưa có Gemini key nên trợ lý chỉ tìm đoạn transcript liên quan."
+                f"Chưa có API key nên {AI_DISPLAY_NAME} chỉ tìm đoạn transcript liên quan."
             )
 
         if not st.session_state.messages:
@@ -801,7 +820,7 @@ else:
                             )
                         if message.get("mode") == "ai":
                             st.caption(
-                                ":material/auto_awesome: Gemini · "
+                                f":material/auto_awesome: {AI_DISPLAY_NAME} · "
                                 f"key slot {message['slot'] + 1}"
                             )
 
@@ -816,10 +835,15 @@ else:
         user_content = str(prompt)
         st.session_state.messages.append({"role": "user", "content": user_content})
         try:
-            with st.status("Trợ lý đang trả lời…", expanded=False) as qa_status:
+            with st.status(
+                f"{AI_DISPLAY_NAME} đang trả lời…", expanded=False
+            ) as qa_status:
                 def show_qa_attempt(attempt: int, total: int, slot: int) -> None:
                     qa_status.update(
-                        label=f"Đang thử Gemini key slot {slot + 1} · {attempt}/{total}"
+                        label=(
+                            f"{AI_DISPLAY_NAME} đang thử key slot {slot + 1} "
+                            f"· {attempt}/{total}"
+                        )
                     )
 
                 rotation = answer_with_key_rotation(
@@ -835,7 +859,7 @@ else:
                 qa_status.update(label="Đã trả lời", state="complete")
         except KeyPoolError as exc:
             result = {
-                "answer": f"Gemini đang tạm thời không trả lời được: {exc}",
+                "answer": f"{AI_DISPLAY_NAME} đang tạm thời chưa trả lời được: {exc}",
                 "citations": [],
                 "mode": "error",
             }

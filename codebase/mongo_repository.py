@@ -118,7 +118,7 @@ class MongoTranscriptRepository:
         self.database_name = database or mongo_database()
         self.client = MongoClient(
             uri or mongo_uri(),
-            appname="catchup-assistant",
+            appname="taphoammo",
             connectTimeoutMS=2_000,
             serverSelectionTimeoutMS=2_000,
         )
@@ -132,7 +132,7 @@ class MongoTranscriptRepository:
             self.client.admin.command("ping")
         except PyMongoError as error:
             raise MongoUnavailable(
-                "Không kết nối được MongoDB của Catch-up Assistant."
+                "Không kết nối được MongoDB của taphoammo."
             ) from error
 
     def ensure_indexes(self) -> None:
@@ -190,7 +190,7 @@ class MongoTranscriptRepository:
             raise
         except (PyMongoError, ValueError, KeyError, TypeError) as error:
             raise MongoUnavailable(
-                "Không thể đọc dữ liệu Catch-up Assistant từ MongoDB."
+                "Không thể đọc dữ liệu taphoammo từ MongoDB."
             ) from error
 
     def get_analysis(self, transcript: TranscriptDocument) -> dict[str, Any] | None:

@@ -1,6 +1,6 @@
-# AI SPEC — Catch-up Assistant · Nhóm Nguyễn Đức Anh
+# AI SPEC — taphoammo · Nhóm Nguyễn Đức Anh
 
-Hướng: **A — VLearn** · Loại: **Tính năng mới** · Trạng thái: **Working · MongoDB thật · Gemini thật**
+Hướng: **A — VLearn** · Loại: **Tính năng mới** · Trạng thái: **Working · MongoDB thật · taphoammo AI**
 
 > Những dữ liệu chỉ người học/nhóm mới có thể cung cấp được đánh dấu `TODO-NGƯỜI-THẬT`. Không thay bằng dữ liệu AI tạo.
 
@@ -40,7 +40,7 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 | Nguyên tắc | Vị trí cụ thể |
 |---|---|
 | G1 — rõ khả năng | Sidebar ghi “chỉ xử lý một buổi chủ động mở” |
-| G2 — rõ độ tin | badge phân biệt “Gemini thật · đã lưu MongoDB” và “trích xuất từ transcript thật” |
+| G2 — rõ độ tin | badge phân biệt “taphoammo AI · đã lưu MongoDB” và “trích xuất từ transcript thật” |
 | G10 — thu hẹp khi nghi ngờ | Q&A từ chối khi không đủ overlap/citation |
 | G11 — giải thích vì sao | mỗi nhãn quiz có `quiz_reason` |
 | G8 — gạt bỏ dễ | user có thể bỏ bản đồ và mở transcript gốc |
@@ -62,8 +62,8 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 
 ## §6. Bốn đường đi của trải nghiệm
 
-- **Happy:** mở Day 1 → đọc 4 điểm Gemini thật từ MongoDB → bấm citation → đọc nguồn.
-- **Low-confidence:** buổi chưa có phân tích Gemini → chỉ hiện trích đoạn nguyên văn, confidence thấp và mời người dùng chủ động phân tích.
+- **Happy:** mở Day 1 → đọc 4 điểm taphoammo AI từ MongoDB → bấm citation → đọc nguồn.
+- **Low-confidence:** buổi chưa có phân tích taphoammo AI → chỉ hiện trích đoạn nguyên văn, confidence thấp và mời người dùng chủ động phân tích.
 - **Failure:** hỏi ngoài bài → trả “chưa tìm thấy căn cứ”, không đoán.
 - **Correction:** user hỏi lại bằng tên khái niệm hoặc đổi buổi; history giữ trong phiên.
 - **Ngoài phạm vi:** UI chỉ chọn một transcript; sidebar nhắc non-goal.
@@ -92,4 +92,5 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 | 2026-07-30 | Thêm guardrail bỏ stopword và ngưỡng khớp | Test câu “nấu phở” phát hiện false positive |
 | 2026-07-30 | Tách nhãn demo và Gemini thật | Không tạo ấn tượng AI đã chạy khi thiếu key |
 | 2026-07-31 | Bỏ summary/quiz mẫu; bắt buộc MongoDB; lưu Gemini theo fingerprint | Runtime chỉ dùng dữ liệu thật và không tái sử dụng output sai phiên bản nguồn |
+| 2026-07-31 | Đổi nhận diện sản phẩm và trợ lý thành taphoammo | Thống nhất tên trên tab trình duyệt, giao diện chính, chat và mini-chat |
 | 2026-07-31 | Thêm retrieval có trọng số, structured output, thinking budget và hậu kiểm câu trả lời | Giảm trả lời lan man, lặp ý, citation sai và suy diễn ngoài transcript |

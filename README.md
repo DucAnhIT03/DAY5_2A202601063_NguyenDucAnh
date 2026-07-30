@@ -1,4 +1,7 @@
-# Catch-up Assistant — VLearn
+# taphoammo — Trợ lý bắt kịp bài học
+
+`taphoammo` là tên hệ thống và `taphoammo AI` là tên trợ lý xuất hiện trên toàn bộ
+giao diện. Phía sau, trợ lý sử dụng Gemini 2.5 Flash làm mô hình nền để xử lý dữ liệu.
 
 Prototype giúp học viên mở một buổi đã bỏ lỡ và nhận 3–5 điểm cần đọc trước, biết điểm nào liên quan quiz, bấm về đúng đoạn transcript gốc, và hỏi thêm trong phạm vi buổi học.
 
@@ -29,7 +32,7 @@ $env:MONGO_URI="mongodb://127.0.0.1:27020"
 $env:MONGO_DATABASE="catchup_assistant"
 ```
 
-Mở `http://localhost:8501`. Trong sidebar, tải lên file `.txt` tại **Nạp key hàng loạt**. Mỗi dòng chứa đúng một Gemini API key; dòng trống và comment bắt đầu bằng `#` được bỏ qua:
+Mở `http://localhost:8501`. Trong sidebar, tải lên file `.txt` tại **API cho taphoammo AI**. Mỗi dòng chứa đúng một Gemini API key; dòng trống và comment bắt đầu bằng `#` được bỏ qua:
 
 ```text
 # gemini-keys.txt
@@ -40,11 +43,11 @@ key-3
 
 Ứng dụng giới hạn đầu vào 256 KB và không ghi key vào repo/log. Có thể dán trực tiếp hàng loạt vào vùng nhập nhiều dòng bên dưới file uploader; **mỗi dòng là một API key**. Bật **Che key trên màn hình** khi trình chiếu. Pool được mã hóa cục bộ bằng Windows DPAPI trong thư mục `.runtime/` đã gitignore, chỉ tài khoản Windows hiện tại giải mã được; vì vậy tải lại trang hoặc khởi động lại Streamlit không làm mất key. Có nút **Xóa key đã lưu** để xóa ngay bản mã hóa.
 
-Pool sử dụng round-robin sau mỗi request. Việc dán/nạp key **không tự gọi AI**; bấm **Phân tích bằng Gemini** khi muốn chạy. Trong lúc chạy, giao diện hiển thị slot và tiến độ thử key. Nếu một key gặp lỗi quota token/rate-limit (`429`/`RESOURCE_EXHAUSTED`), key lỗi hoặc provider `5xx`, hệ thống tự chạy lại toàn bộ request bằng slot tiếp theo; mỗi request có timeout để không chờ vô hạn. Lời gọi Gemini là non-streaming nên output dở dang không được đưa ra UI; người dùng chỉ thấy kết quả hoàn chỉnh. Lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
+Pool sử dụng round-robin sau mỗi request. Việc dán/nạp key **không tự gọi AI**; bấm **Phân tích bằng taphoammo AI** khi muốn chạy. Trong lúc chạy, giao diện hiển thị slot và tiến độ thử key. Nếu một key gặp lỗi quota token/rate-limit (`429`/`RESOURCE_EXHAUSTED`), key lỗi hoặc provider `5xx`, hệ thống tự chạy lại toàn bộ request bằng slot tiếp theo; mỗi request có timeout để không chờ vô hạn. Lời gọi Gemini là non-streaming nên output dở dang không được đưa ra UI; người dùng chỉ thấy kết quả hoàn chỉnh. Lỗi request không hợp lệ (`400`) dừng ngay để không tiêu tốn cả pool. Giao diện và log chỉ hiển thị số slot/key đã che, không hiển thị key đầy đủ.
 
-Tab **Hỏi trợ lý** dùng chat input native: lời chào/cảm ơn được phản hồi ngay mà
+Tab **Hỏi taphoammo AI** dùng chat input native: lời chào/cảm ơn được phản hồi ngay mà
 không tiêu key; câu hỏi tổng quan như “Tóm tắt buổi học này” và câu hỏi khái niệm
-được Gemini trả lời từ transcript đang mở, kèm citation thật. Nếu provider lỗi, UI
+được taphoammo AI trả lời từ transcript đang mở, kèm citation thật. Nếu provider lỗi, UI
 hiển thị thông báo an toàn trong hội thoại thay vì làm hỏng toàn bộ trang. Lịch sử
 chat tự giới hạn ở 420 px và cuộn riêng khi dài; ô nhập luôn nằm ngay bên dưới.
 
@@ -56,16 +59,16 @@ AI phải trả lời thẳng, không mở bài/kết bài, không tự tạo v�
 chối thay vì suy đoán.
 
 Trong tab **Transcript** và vùng **Kiểm chứng nguồn**, người dùng có thể bôi đen một
-phần trong cùng một đoạn rồi chọn **Giải thích bằng AI**. Hệ thống xác minh phần chọn
-thực sự thuộc mã đoạn và chỉ gửi đúng đoạn đó cho Gemini. Câu đã chọn cùng lời giải
+phần trong cùng một đoạn rồi chọn **Giải thích bằng taphoammo AI**. Hệ thống xác minh phần chọn
+thực sự thuộc mã đoạn và chỉ gửi đúng đoạn đó cho taphoammo AI. Câu đã chọn cùng lời giải
 thích xuất hiện thành một mini-chat ngay dưới chính đoạn transcript, không đổi tab;
 ô **Hỏi tiếp về phần này…** cho phép trò chuyện nhiều lượt ngay tại chỗ. Mỗi câu trả
 lời tiếp theo nhận phần đã chọn, lịch sử mini-chat và đúng một đoạn nguồn, rồi giữ lại
-toàn bộ lượt hỏi với citation tương ứng. Nút **Hỏi AI về cả đoạn** là lựa chọn nhanh
+toàn bộ lượt hỏi với citation tương ứng. Nút **Hỏi taphoammo AI về cả đoạn** là lựa chọn nhanh
 khi không cần chọn một câu cụ thể. Lịch sử từng mini-chat cũng cuộn độc lập; tiêu đề
 và ô hỏi tiếp vẫn luôn ở ngoài vùng cuộn để người dùng không phải tìm lại thao tác.
 
-Kết quả Gemini chỉ được lưu vào `analyses` sau khi có 3–5 trọng điểm và mọi citation
+Kết quả taphoammo AI chỉ được lưu vào `analyses` sau khi có 3–5 trọng điểm và mọi citation
 đều tồn tại trong đúng transcript. Bản ghi gắn fingerprint SHA-256 của transcript;
 khi nguồn thay đổi, phân tích cũ không được tái sử dụng. Có thể tạo/làm mới phân tích
 thật bằng giao diện hoặc CLI:
@@ -90,7 +93,7 @@ $env:GEMINI_API_KEYS="key-1,key-2,key-3"
 
 Không commit key hoặc `.streamlit/secrets.toml`. Trace AI thật được ghi cục bộ tại `codebase/logs/ai-trace.jsonl` và đã gitignore; trước khi nộp chỉ đưa trace tối thiểu không chứa transcript dài hay secret.
 
-Nếu chưa có kết quả Gemini, app chỉ hiển thị bản **trích xuất trực tiếp từ transcript
+Nếu chưa có kết quả taphoammo AI, app chỉ hiển thị bản **trích xuất trực tiếp từ transcript
 MongoDB thật** và ghi rõ “chưa phân tích AI”; không có summary hard-code. Data pack
 không cung cấp ngân hàng quiz thật nên collection quiz hiện để trống và UI không tự
 gắn nhãn quiz. Chỉ nhập quiz khi có nguồn được phép sử dụng.

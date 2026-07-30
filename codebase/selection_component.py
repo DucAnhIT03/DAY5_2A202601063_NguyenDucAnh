@@ -9,8 +9,8 @@ import streamlit as st
 _HTML = """
 <div id="selection-root">
   <div id="selection-toolbar" role="status">
-    <span id="selection-hint">Bôi đen một phần trong một đoạn để hỏi AI.</span>
-    <button id="selection-ask" type="button" hidden>Giải thích bằng AI</button>
+    <span id="selection-hint">Bôi đen một phần trong một đoạn để hỏi taphoammo AI.</span>
+    <button id="selection-ask" type="button" hidden>Giải thích bằng taphoammo AI</button>
   </div>
   <div id="selection-stage"></div>
 </div>
@@ -271,7 +271,7 @@ export default function(component) {
     const wholeButton = document.createElement("button")
     wholeButton.className = "catchup-selection-segment-ask-all"
     wholeButton.type = "button"
-    wholeButton.textContent = "Hỏi AI về cả đoạn"
+    wholeButton.textContent = "Hỏi taphoammo AI về cả đoạn"
     wholeButton.onclick = () => {
       setTriggerValue("ask", {
         text: String(item.text ?? "").slice(0, 1600),
@@ -291,7 +291,7 @@ export default function(component) {
 
       const threadTitle = document.createElement("p")
       threadTitle.className = "catchup-selection-thread-title"
-      threadTitle.textContent = "AI · Giải thích ngay tại đoạn này"
+      threadTitle.textContent = "taphoammo AI · Giải thích ngay tại đoạn này"
       thread.appendChild(threadTitle)
 
       const history = document.createElement("div")
@@ -319,7 +319,7 @@ export default function(component) {
         const meta = document.createElement("p")
         meta.className = "catchup-selection-meta"
         const source = String(turn.segment_id ?? item.id ?? "")
-        const provider = turn.mode === "ai" ? "Gemini" : "Trích xuất từ transcript"
+        const provider = turn.mode === "ai" ? "taphoammo AI" : "Trích xuất từ transcript"
         const slot = Number.isInteger(turn.slot) ? ` · key slot ${turn.slot + 1}` : ""
         meta.textContent = `Nguồn [${source}] · ${provider}${slot}`
 
@@ -344,8 +344,8 @@ export default function(component) {
         spinner.setAttribute("aria-hidden", "true")
         const pendingText = document.createElement("span")
         pendingText.textContent = pending.kind === "followup"
-          ? "Gemini đang trả lời tiếp từ đúng ngữ cảnh này…"
-          : "Gemini đang đọc đúng đoạn này và chuẩn bị câu trả lời…"
+          ? "taphoammo AI đang trả lời tiếp từ đúng ngữ cảnh này…"
+          : "taphoammo AI đang đọc đúng đoạn này và chuẩn bị câu trả lời…"
         pendingStatus.append(spinner, pendingText)
         pendingTurn.append(pendingQuestion, pendingStatus)
         history.appendChild(pendingTurn)
@@ -431,7 +431,7 @@ export default function(component) {
     if (!text) {
       selected = null
       askButton.hidden = true
-      hint.textContent = "Bôi đen một phần trong một đoạn để hỏi AI."
+      hint.textContent = "Bôi đen một phần trong một đoạn để hỏi taphoammo AI."
       return
     }
 

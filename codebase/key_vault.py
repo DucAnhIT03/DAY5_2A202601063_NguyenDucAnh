@@ -57,7 +57,7 @@ def _protect(value: bytes) -> bytes:
     crypt_protect.restype = wintypes.BOOL
     protected = crypt_protect(
         ctypes.byref(input_blob),
-        "Catch-up Assistant Gemini key pool",
+        "taphoammo Gemini key pool",
         None,
         None,
         None,
