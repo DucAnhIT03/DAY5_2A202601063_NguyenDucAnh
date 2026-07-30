@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import streamlit as st
 
 try:
@@ -23,45 +21,66 @@ except ModuleNotFoundError:
 
 
 st.set_page_config(
-    page_title="Catch-up Assistant",
+    page_title="Catch-up Assistant · VLearn",
     page_icon=":material/school:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Người dùng yêu cầu thiết kế giao diện; CSS chỉ bổ sung micro-polish cho các
-# container có key ổn định. Màu/font chính vẫn do config.toml quản lý.
 st.html(
     """
     <style>
-    .stMainBlockContainer {max-width: 1440px; padding-top: 1.5rem; padding-bottom: 5rem;}
+    .stApp {background:
+        radial-gradient(circle at 92% 0%, rgba(99,102,241,.10), transparent 25rem),
+        #F8F9FD;}
+    .stMainBlockContainer {max-width: 1380px; padding: 1.25rem 2rem 5rem;}
+    .st-key-topbar {padding: .2rem .1rem .8rem;}
+    .st-key-topbar h3 {margin: 0; letter-spacing: -.02em;}
     .st-key-hero {
-        background: linear-gradient(135deg, #312E81 0%, #4F46E5 58%, #7C3AED 100%);
-        border: 0 !important; border-radius: 22px; padding: 1.55rem 1.8rem;
-        box-shadow: 0 18px 44px rgba(79,70,229,.18); margin-bottom: 1.1rem;
+        background: linear-gradient(125deg, #25205F 0%, #4338CA 58%, #6D5CE7 100%);
+        border: 0 !important; border-radius: 24px; padding: 1.7rem 2rem 1.45rem;
+        box-shadow: 0 20px 50px rgba(55,48,163,.20); margin-bottom: 1.25rem;
+        overflow: hidden;
     }
-    .st-key-hero h1, .st-key-hero p {color: white !important;}
-    .st-key-hero p {opacity: .84;}
+    .st-key-hero h1, .st-key-hero p, .st-key-hero label {color: #FFFFFF !important;}
+    .st-key-hero h1 {max-width: 850px; letter-spacing: -.035em; margin-bottom: .35rem;}
+    .st-key-hero p {color: #E3E2FF !important; max-width: 850px;}
+    .st-key-hero [data-baseweb="select"] > div {
+        background: rgba(255,255,255,.98); border-color: rgba(255,255,255,.4);
+    }
+    .st-key-summary_strip {
+        background: #FFFFFF; border: 1px solid #E7E9F2; border-radius: 16px;
+        padding: .25rem .8rem; box-shadow: 0 5px 18px rgba(30,41,59,.04);
+    }
     [class*="st-key-point_card_"] {
-        background: #FFFFFF; border-radius: 16px; padding: .3rem .45rem;
-        box-shadow: 0 5px 20px rgba(30,41,59,.045);
-        transition: transform .15s ease, box-shadow .15s ease;
+        background: #FFFFFF; border-radius: 17px; padding: .28rem .45rem;
+        border: 1px solid #E5E7F0 !important;
+        box-shadow: 0 5px 18px rgba(30,41,59,.045);
+        transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
     }
     [class*="st-key-point_card_"]:hover {
-        transform: translateY(-2px); box-shadow: 0 10px 26px rgba(79,70,229,.10);
+        transform: translateY(-2px); border-color: #C7D2FE !important;
+        box-shadow: 0 12px 28px rgba(67,56,202,.10);
     }
     .st-key-source_panel {
-        background: #FFFFFF; box-shadow: 0 5px 20px rgba(30,41,59,.045);
+        background: linear-gradient(180deg, #FFFFFF 0%, #FBFCFF 100%);
+        border: 1px solid #E5E7F0 !important; border-radius: 17px;
+        box-shadow: 0 5px 18px rgba(30,41,59,.045);
     }
     .st-key-chat_shell {
-        background: #FFFFFF; border-radius: 18px; padding: .45rem .7rem 1rem;
-        box-shadow: 0 5px 20px rgba(30,41,59,.045);
+        background: #FFFFFF; border: 1px solid #E5E7F0 !important;
+        border-radius: 20px; padding: .45rem .85rem 1rem;
+        box-shadow: 0 8px 26px rgba(30,41,59,.055);
     }
-    .st-key-sidebar_brand {padding: .35rem .15rem .9rem;}
+    .st-key-sidebar_brand {padding: .25rem .1rem .65rem;}
+    [data-testid="stSidebar"] {box-shadow: 8px 0 28px rgba(30,41,59,.035);}
     [data-testid="stSidebar"] [data-testid="stButton"] button {width: 100%;}
+    [data-testid="stMetric"] {padding: .35rem .2rem;}
+    [data-testid="stChatMessage"] {border-radius: 14px; padding: .6rem .8rem;}
     @media (max-width: 900px) {
-        .stMainBlockContainer {padding-left: 1rem; padding-right: 1rem;}
-        .st-key-hero {padding: 1.2rem; border-radius: 16px;}
+        .stMainBlockContainer {padding: .8rem 1rem 4rem;}
+        .st-key-hero {padding: 1.25rem; border-radius: 18px;}
+        .st-key-hero h1 {font-size: 2rem !important;}
     }
     </style>
     """
@@ -78,25 +97,26 @@ labels = {
     path.name: path.read_text(encoding="utf-8").splitlines()[0].replace("# ", "")
     for path in files
 }
+
 st.session_state.setdefault("messages", [])
 st.session_state.setdefault("summary_cache", {})
 st.session_state.setdefault("ai_generated_sessions", set())
 st.session_state.setdefault("selected_citation", None)
 st.session_state.setdefault("gemini_api_key", "")
 
+
+def reset_session_context() -> None:
+    st.session_state.messages = []
+    st.session_state.selected_citation = None
+
+
 with st.sidebar:
     with st.container(key="sidebar_brand"):
         st.markdown("## :material/school: VLearn")
         st.caption("Catch-up Assistant · Học đúng trọng tâm")
-    selected_name = st.selectbox(
-        "Chọn buổi bạn đã bỏ lỡ",
-        options=[p.name for p in files],
-        index=3 if len(files) > 3 else 0,
-        format_func=lambda name: labels[name].replace("Transcript bài giảng (bản sạch) — ", ""),
-        key="session_selector",
-    )
-    st.caption(":material/info: Mỗi lần chỉ phân tích một buổi bạn chủ động mở.")
-    with st.popover("Kết nối AI", icon=":material/key:"):
+
+    st.markdown("**Trạng thái trợ lý**")
+    with st.popover("Kết nối Gemini", icon=":material/key:"):
         st.text_input(
             "Gemini API key",
             type="password",
@@ -104,20 +124,49 @@ with st.sidebar:
             placeholder="AIza…",
             help="Key chỉ tồn tại trong phiên trình duyệt và không được ghi vào repo.",
         )
-        st.caption("Lấy key tại Google AI Studio. Không chia sẻ key trong ảnh demo.")
+        st.caption("Key chỉ dùng trong phiên này. Không để lộ key khi trình chiếu.")
+
     active_key = st.session_state.gemini_api_key.strip() or None
     if ai_available(active_key):
-        st.badge("Gemini đang bật", color="green", icon=":material/bolt:")
+        st.success("Gemini đã sẵn sàng", icon=":material/check_circle:")
     else:
-        st.badge("Demo có kiểm soát", color="orange", icon=":material/science:")
-        st.caption("Chưa có API key. Nội dung mẫu được gắn nhãn, không giả là AI thật.")
-    with st.expander("Catch-up Assistant làm gì?", icon=":material/help:"):
+        st.warning("Đang dùng dữ liệu demo", icon=":material/science:")
+        st.caption("Kết nối Gemini để chạy quyết định AI thật khi demo.")
+
+    with st.expander("Trợ lý làm được gì?", icon=":material/help:"):
         st.markdown(
             "- Chọn **3–5 điểm nên đọc trước**\n"
             "- Đánh dấu nội dung **liên quan quiz**\n"
             "- Dẫn về **đúng transcript gốc**\n"
-            "- Không tự kết luận bạn đã hiểu bài"
+            "- Từ chối khi **không đủ căn cứ**"
         )
+    st.caption("VLearn · Prototype 1.0")
+
+with st.container(horizontal=True, vertical_alignment="center", key="topbar"):
+    st.markdown("### :material/auto_stories: Không bỏ lỡ phần quan trọng")
+    st.space("stretch")
+    if ai_available(active_key):
+        st.badge("AI đang hoạt động", color="green", icon=":material/bolt:")
+    else:
+        st.badge("Demo an toàn", color="orange", icon=":material/shield:")
+
+with st.container(key="hero"):
+    st.caption("CATCH-UP ASSISTANT")
+    st.title("Bắt kịp một buổi học trong vài phút")
+    st.write(
+        "Chọn buổi bạn đã lỡ. Trợ lý sẽ chỉ ra phần nên đọc trước, "
+        "đánh dấu nội dung liên quan quiz và luôn dẫn về nguồn gốc."
+    )
+    selected_name = st.selectbox(
+        "Bạn đã bỏ lỡ buổi nào?",
+        options=[p.name for p in files],
+        index=3 if len(files) > 3 else 0,
+        format_func=lambda name: labels[name].replace(
+            "Transcript bài giảng (bản sạch) — ", ""
+        ),
+        key="session_selector",
+        on_change=reset_session_context,
+    )
 
 path = next(p for p in files if p.name == selected_name)
 segments = segment_map(path)
@@ -125,130 +174,123 @@ cache_key = path.name
 if cache_key not in st.session_state.summary_cache:
     st.session_state.summary_cache[cache_key] = default_summary(path)
 
-# Khi đã kết nối model, lần đầu mở mỗi buổi sẽ tự chạy đúng flow sản phẩm:
-# học viên không cần nhập prompt hay bấm nút để nhận bản đồ đọc nhanh.
-if (
-    ai_available(active_key)
-    and cache_key not in st.session_state.ai_generated_sessions
-):
+if ai_available(active_key) and cache_key not in st.session_state.ai_generated_sessions:
     try:
         with st.spinner("AI đang đọc transcript và đối chiếu quiz…"):
             st.session_state.summary_cache[cache_key] = summarize_with_gemini(
                 path, QUIZ_BANK, active_key
             )
         st.session_state.ai_generated_sessions.add(cache_key)
+        st.toast("Đã tạo lộ trình đọc bằng Gemini.", icon=":material/check_circle:")
     except Exception as exc:
         st.warning(
-            f"Chưa thể phân tích bằng Gemini; đang hiển thị bản demo có kiểm soát. Chi tiết: {exc}",
+            f"Chưa thể gọi Gemini; đang dùng dữ liệu demo có kiểm soát. {exc}",
             icon=":material/warning:",
         )
-
-session_title = labels[path.name].replace("Transcript bài giảng (bản sạch) — ", "")
-with st.container(key="hero"):
-    st.caption("TRỢ LÝ BẮT KỊP BÀI HỌC")
-    st.title("Nắm đúng trọng tâm. Không cần đọc lại từ đầu.")
-    st.write(f"Đang xem: **{session_title}**")
-
-with st.container(horizontal=True, vertical_alignment="center"):
-    st.badge("3–5 điểm cần đọc trước", color="blue")
-    st.badge("Có trích dẫn gốc", color="gray")
-    if st.button(
-        "Phân tích lại bằng AI",
-        icon=":material/auto_awesome:",
-        type="primary",
-        disabled=not ai_available(active_key),
-        help="Mở “Kết nối AI” ở sidebar và nhập Gemini API key."
-        if not ai_available(active_key)
-        else None,
-    ):
-        try:
-            with st.spinner("Đang đọc transcript và đối chiếu quiz…"):
-                st.session_state.summary_cache[cache_key] = summarize_with_gemini(
-                    path, QUIZ_BANK, active_key
-                )
-            st.toast("Đã phân tích bằng Gemini.", icon=":material/check_circle:")
-        except Exception as exc:
-            st.error(f"Không thể gọi AI: {exc}", icon=":material/error:")
 
 summary = st.session_state.summary_cache[cache_key]
 quiz_count = sum(bool(point.get("quiz")) for point in summary)
 source_count = len({citation for point in summary for citation in point["citations"]})
 
-metrics = st.columns(4)
-metrics[0].metric("Trọng điểm", len(summary), help="Số điểm AI gợi ý đọc trước")
-metrics[1].metric("Liên quan quiz", quiz_count, help="Điểm có nội dung khớp quiz cũ")
-metrics[2].metric("Nguồn gốc", source_count, help="Số đoạn transcript dùng để kiểm chứng")
-metrics[3].metric(
-    "Chế độ",
-    "Gemini" if ai_available(active_key) else "Demo",
-    help="AI thật khi đã kết nối Gemini API key",
-)
+with st.container(horizontal=True, vertical_alignment="center", key="summary_strip"):
+    st.markdown(f"**:material/route: {len(summary)} trọng điểm**")
+    st.markdown(f"**:material/quiz: {quiz_count} điểm nên ưu tiên cho quiz**")
+    st.markdown(f"**:material/bookmarks: {source_count} đoạn nguồn**")
+    st.space("stretch")
+    if st.button(
+        "Phân tích lại",
+        icon=":material/auto_awesome:",
+        type="primary",
+        disabled=not ai_available(active_key),
+        help="Kết nối Gemini trong sidebar để chạy AI thật."
+        if not ai_available(active_key)
+        else None,
+    ):
+        try:
+            with st.spinner("Đang phân tích lại nội dung buổi học…"):
+                st.session_state.summary_cache[cache_key] = summarize_with_gemini(
+                    path, QUIZ_BANK, active_key
+                )
+            st.toast("Đã cập nhật lộ trình đọc.", icon=":material/check_circle:")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Không thể gọi Gemini: {exc}", icon=":material/error:")
 
+st.space("small")
 left, right = st.columns([1.35, 1], gap="large")
 
 with left:
     st.subheader("Lộ trình đọc ưu tiên", anchor=False)
-    st.caption("Đọc từ trên xuống; mở nguồn bất cứ lúc nào để tự kiểm chứng.")
+    st.caption("Bắt đầu từ trên xuống; mỗi ý đều có nguồn để bạn kiểm chứng.")
     for index, point in enumerate(summary, 1):
         with st.container(border=True, key=f"point_card_{index}"):
             with st.container(horizontal=True, vertical_alignment="center"):
-                st.badge(f"Bước {index}", color="blue")
+                st.badge(f"{index:02d}", color="blue")
                 if point.get("quiz"):
-                    st.badge("Nên ưu tiên cho quiz", color="orange", icon=":material/quiz:")
+                    st.badge(
+                        "Ưu tiên cho quiz", color="orange", icon=":material/quiz:"
+                    )
                 confidence = point.get("confidence", "chưa rõ")
-                confidence_color = "green" if confidence == "cao" else "gray"
-                st.badge(f"Tin cậy {confidence}", color=confidence_color)
+                st.badge(
+                    f"Tin cậy {confidence}",
+                    color="green" if confidence == "cao" else "gray",
+                )
             st.markdown(f"#### {point['title']}")
             st.write(point["summary"])
             if point.get("quiz_reason"):
-                st.caption(f"Vì sao ưu tiên: {point['quiz_reason']}")
+                st.caption(f":material/lightbulb: {point['quiz_reason']}")
             with st.container(horizontal=True):
                 for citation in point["citations"]:
                     if st.button(
-                        f"Xem [{citation}]",
-                        icon=":material/arrow_forward:",
+                        f"Mở [{citation}]",
+                        icon=":material/arrow_outward:",
                         key=f"cite-{index}-{citation}",
                     ):
                         st.session_state.selected_citation = citation
 
 with right:
-    st.subheader("Nguồn để kiểm chứng", anchor=False)
-    st.caption("Transcript nguyên văn của đúng đoạn đang được trích dẫn.")
-    with st.container(height=520, border=True, key="source_panel"):
+    st.subheader("Kiểm chứng với bài giảng gốc", anchor=False)
+    st.caption("Bạn luôn là người quyết định có tin bản tóm tắt hay không.")
+    with st.container(height=540, border=True, key="source_panel"):
         citation = st.session_state.selected_citation
         if citation and citation in segments:
             st.badge(citation, color="blue", icon=":material/bookmark:")
-            st.markdown("#### Đoạn giảng gốc")
+            st.markdown("#### Đoạn transcript gốc")
             st.write(segments[citation].text)
-            st.caption(":material/verified: Trích nguyên văn từ dữ liệu buổi học.")
+            st.caption(":material/verified: Trích nguyên văn từ buổi học đang mở.")
         else:
-            st.markdown("### :material/touch_app: Chọn một nguồn")
+            st.markdown("### :material/touch_app: Mở một trích dẫn")
             st.write(
-                "Bấm **Xem [mã đoạn]** dưới một trọng điểm. "
-                "Đoạn giảng gốc sẽ hiện ở đây để bạn đối chiếu."
+                "Chọn **Mở [mã đoạn]** dưới một trọng điểm. "
+                "Đoạn giảng gốc sẽ xuất hiện tại đây để bạn đối chiếu."
             )
-            st.caption("Bạn không cần tin tuyệt đối vào bản tóm tắt của AI.")
+            st.info(
+                "Bản tóm tắt chỉ là bản đồ định hướng, không thay thế bài giảng gốc.",
+                icon=":material/info:",
+            )
 
 st.space("medium")
 with st.container(border=True, key="chat_shell"):
     with st.container(horizontal=True, vertical_alignment="center"):
-        st.subheader("Hỏi trợ lý về buổi này", anchor=False)
+        st.subheader("Hỏi thêm về buổi học", anchor=False)
+        st.space("stretch")
         if st.session_state.messages and st.button(
-            "Xoá hội thoại", icon=":material/delete_sweep:", key="clear_chat"
+            "Bắt đầu lại", icon=":material/replay:", key="clear_chat"
         ):
             st.session_state.messages = []
             st.rerun()
     st.caption(
-        ":material/security: Câu trả lời phải có căn cứ trong transcript; "
-        "ngoài phạm vi, trợ lý sẽ nói rõ."
+        ":material/shield: Trợ lý chỉ trả lời từ transcript đang mở. "
+        "Nếu không đủ căn cứ, trợ lý sẽ từ chối thay vì đoán."
     )
+
     if not st.session_state.messages:
         suggestion = st.pills(
-            "Bạn có thể hỏi",
+            "Câu hỏi gợi ý",
             [
                 "Vì sao symbolic AI chạm trần?",
                 "Deep learning học đặc trưng thế nào?",
-                "Buổi này có nói về cách làm CV không?",
+                "Buổi này có hướng dẫn làm CV không?",
             ],
             label_visibility="collapsed",
         )
@@ -258,29 +300,34 @@ with st.container(border=True, key="chat_shell"):
     for message in st.session_state.messages:
         with st.chat_message(
             message["role"],
-            avatar=":material/smart_toy:" if message["role"] == "assistant" else None,
+            avatar=":material/smart_toy:"
+            if message["role"] == "assistant"
+            else ":material/person:",
         ):
             st.write(message["content"])
             if message.get("citations"):
                 st.caption("Nguồn: " + ", ".join(f"[{c}]" for c in message["citations"]))
 
 prompt = suggestion or st.chat_input(
-    "Ví dụ: Vì sao symbolic AI chạm trần?",
-    submit_mode="disable",
+    "Hỏi một điều về buổi học này…", submit_mode="disable"
 )
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=":material/person:"):
         st.write(prompt)
-    with st.chat_message("assistant"):
-        with st.spinner("Đang kiểm tra căn cứ…"):
+    with st.chat_message("assistant", avatar=":material/smart_toy:"):
+        with st.spinner("Đang tìm căn cứ trong transcript…"):
             result = answer_question(path, prompt, active_key)
         st.write(result["answer"])
         if result["citations"]:
             st.caption("Nguồn: " + ", ".join(f"[{c}]" for c in result["citations"]))
         if not result["grounded"]:
-            st.caption("Hệ thống đã thu hẹp phạm vi thay vì suy đoán.")
+            st.caption(":material/shield: Đã thu hẹp phạm vi thay vì suy đoán.")
     st.session_state.messages.append(
-        {"role": "assistant", "content": result["answer"], "citations": result["citations"]}
+        {
+            "role": "assistant",
+            "content": result["answer"],
+            "citations": result["citations"],
+        }
     )
     st.rerun()
