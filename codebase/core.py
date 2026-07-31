@@ -16,6 +16,15 @@ ROOT = Path(__file__).resolve().parents[1]
 TRANSCRIPT_DIR = ROOT / "data" / "vlearn-pack" / "transcript"
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 SEGMENT_RE = re.compile(r"\*\*\[(T\d{2}-\d{3})\]\*\*\s*(.*?)(?=\n\*\*\[T|\Z)", re.S)
+USER_SEGMENT_RE = re.compile(
+    r"^(?:\*\*)?\[([A-Za-z][A-Za-z0-9_-]{1,31})\](?:\*\*)?\s*"
+    r"(.*?)(?=^(?:\*\*)?\[[A-Za-z][A-Za-z0-9_-]{1,31}\](?:\*\*)?\s*|\Z)",
+    re.S | re.M,
+)
+MAX_USER_TRANSCRIPT_CHARACTERS = 500_000
+MAX_USER_QUIZ_QUESTIONS = 100
+MAX_USER_SEGMENTS = 600
+MAX_USER_EXPLICIT_SEGMENT_CHARACTERS = 5_000
 GREETING_PREFIXES = ("hi", "hello", "hey", "alo", "chào", "xin chào")
 THANKS_PREFIXES = ("cảm ơn", "cam on", "thank", "thanks")
 OVERVIEW_PHRASES = (
@@ -82,7 +91,7 @@ INLINE_RESPONSE_SCHEMA = {
 
 SUMMARY_RESPONSE_SCHEMA = {
     "type": "array",
-    "minItems": 3,
+    "minItems": 2,
     "maxItems": 5,
     "items": {
         "type": "object",
@@ -116,6 +125,8 @@ class TranscriptDocument:
     title: str
     segments: tuple[Segment, ...]
     fingerprint: str = ""
+    quiz_questions: tuple[str, ...] = ()
+    source: str = ""
 
 
 TranscriptSource: TypeAlias = Path | TranscriptDocument
@@ -131,6 +142,10 @@ class RotationResult:
 
 class KeyPoolError(RuntimeError):
     """Safe error that never includes an API key or raw provider response."""
+
+
+class LessonInputError(ValueError):
+    """A safe validation error for user-submitted lesson data."""
 
 
 AttemptCallback: TypeAlias = Callable[[int, int, int], None]
@@ -152,6 +167,141 @@ def transcript_from_path(path: Path) -> TranscriptDocument:
             for segment_id, text in SEGMENT_RE.findall(raw)
         ),
         fingerprint=hashlib.sha256(raw_bytes).hexdigest(),
+        source="vlearn-pack-anonymized",
+    )
+
+
+def _split_user_transcript(text: str, *, max_segment_chars: int = 900) -> list[str]:
+    paragraphs = [
+        re.sub(r"\s+", " ", paragraph).strip()
+        for paragraph in re.split(r"\n\s*\n+", text)
+        if paragraph.strip()
+    ]
+    units: list[str] = []
+    for paragraph in paragraphs:
+        sentence_units = (
+            re.split(r"(?<=[.!?…])\s+", paragraph)
+            if len(paragraph) > max_segment_chars
+            else [paragraph]
+        )
+        for sentence in sentence_units:
+            remaining = sentence.strip()
+            while len(remaining) > max_segment_chars:
+                split_at = remaining.rfind(" ", 0, max_segment_chars + 1)
+                if split_at < max_segment_chars // 2:
+                    split_at = max_segment_chars
+                units.append(remaining[:split_at].strip())
+                remaining = remaining[split_at:].strip()
+            if remaining:
+                units.append(remaining)
+
+    chunks: list[str] = []
+    current = ""
+    for unit in units:
+        candidate = f"{current} {unit}".strip()
+        if current and len(candidate) > max_segment_chars:
+            chunks.append(current)
+            current = unit
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def normalize_quiz_questions(values: Sequence[str]) -> tuple[str, ...]:
+    questions: list[str] = []
+    seen: set[str] = set()
+    for raw_value in values:
+        question = re.sub(r"\s+", " ", str(raw_value)).strip()
+        if not question:
+            continue
+        if len(question) > 500:
+            raise LessonInputError("Mỗi câu hỏi quiz được dài tối đa 500 ký tự.")
+        marker = question.casefold()
+        if marker not in seen:
+            seen.add(marker)
+            questions.append(question)
+    if len(questions) > MAX_USER_QUIZ_QUESTIONS:
+        raise LessonInputError(
+            f"Mỗi bài học được nhập tối đa {MAX_USER_QUIZ_QUESTIONS} câu hỏi quiz."
+        )
+    return tuple(questions)
+
+
+def user_transcript_from_text(
+    title: str,
+    transcript_text: str,
+    quiz_questions: Sequence[str] = (),
+) -> TranscriptDocument:
+    """Validate and normalize one user lesson without touching demo data."""
+    clean_title = re.sub(r"\s+", " ", str(title)).strip()
+    if not 3 <= len(clean_title) <= 160:
+        raise LessonInputError("Tên buổi học phải có từ 3 đến 160 ký tự.")
+
+    normalized_text = str(transcript_text).replace("\r\n", "\n").replace("\r", "\n").strip()
+    compact_length = len(re.sub(r"\s+", " ", normalized_text))
+    if compact_length < 80:
+        raise LessonInputError("Transcript cần có ít nhất 80 ký tự nội dung.")
+    if len(normalized_text) > MAX_USER_TRANSCRIPT_CHARACTERS:
+        raise LessonInputError(
+            f"Transcript được dài tối đa {MAX_USER_TRANSCRIPT_CHARACTERS:,} ký tự."
+        )
+
+    title_key = unicodedata.normalize("NFKD", clean_title).encode(
+        "ascii", "ignore"
+    ).decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", title_key.casefold()).strip("-")[:48]
+    content_fingerprint = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+
+    explicit_segments = [
+        Segment(segment_id, re.sub(r"\s+", " ", text).strip())
+        for segment_id, text in USER_SEGMENT_RE.findall(normalized_text)
+        if text.strip()
+    ]
+    if explicit_segments:
+        segment_ids = [segment.id for segment in explicit_segments]
+        if len(segment_ids) != len(set(segment_ids)):
+            raise LessonInputError("Transcript có mã đoạn bị trùng.")
+        if len(explicit_segments) > MAX_USER_SEGMENTS:
+            raise LessonInputError(
+                f"Transcript được có tối đa {MAX_USER_SEGMENTS} đoạn."
+            )
+        if any(
+            len(segment.text) > MAX_USER_EXPLICIT_SEGMENT_CHARACTERS
+            for segment in explicit_segments
+        ):
+            raise LessonInputError(
+                "Mỗi đoạn có mã sẵn được dài tối đa "
+                f"{MAX_USER_EXPLICIT_SEGMENT_CHARACTERS:,} ký tự."
+            )
+        segments = tuple(explicit_segments)
+    else:
+        prefix = f"U{content_fingerprint[:4].upper()}"
+        chunks = _split_user_transcript(normalized_text)
+        segments = tuple(
+            Segment(f"{prefix}-{index:03d}", chunk)
+            for index, chunk in enumerate(chunks, start=1)
+        )
+        if not segments:
+            raise LessonInputError("Không thể tách transcript thành các đoạn hợp lệ.")
+
+    normalized_quiz = normalize_quiz_questions(quiz_questions)
+    input_fingerprint = hashlib.sha256(
+        (
+            content_fingerprint
+            + "\0QUIZ\0"
+            + json.dumps(normalized_quiz, ensure_ascii=False)
+        ).encode("utf-8")
+    ).hexdigest()
+    name = f"user-{slug or 'bai-hoc'}-{content_fingerprint[:8]}.md"
+    return TranscriptDocument(
+        name=name,
+        title=clean_title,
+        segments=segments,
+        fingerprint=input_fingerprint,
+        quiz_questions=normalized_quiz,
+        source="user-submitted",
     )
 
 
@@ -506,9 +656,11 @@ def summarize_with_gemini(
         if quiz_questions
         else "KHÔNG CÓ NGÂN HÀNG QUIZ ĐƯỢC CẤP"
     )
-    prompt = f"""NHIỆM VỤ: Chọn đúng 3-5 điều quan trọng nhất để người bỏ lỡ buổi học đọc trước.
+    prompt = f"""NHIỆM VỤ: Chọn các điều quan trọng nhất để người bỏ lỡ buổi học đọc trước.
 
 TIÊU CHÍ:
+- Mục tiêu 3-5 mục; nếu transcript không đủ nội dung chất lượng thì trả đúng 2 mục,
+  tuyệt đối không thêm phần đệm chỉ để đủ số lượng.
 - Mỗi mục chỉ có một ý chính, không trùng lặp với mục khác.
 - title cụ thể, tối đa 12 từ; summary tối đa 2 câu và 90 từ.
 - Ưu tiên khái niệm, quan hệ nhân-quả, quy trình và ví dụ giúp hiểu bài.
@@ -535,8 +687,8 @@ TRANSCRIPT:
         ),
     )
     result = _extract_json(response.text)
-    if not isinstance(result, list) or not 3 <= len(result) <= 5:
-        raise ValueError("taphoammo AI phải trả về đúng 3-5 trọng điểm.")
+    if not isinstance(result, list) or not 2 <= len(result) <= 5:
+        raise ValueError("taphoammo AI phải trả về từ 2 đến 5 trọng điểm.")
     valid_ids = {s.id for s in segments}
     seen_titles: set[str] = set()
     for item in result:

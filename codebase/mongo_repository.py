@@ -49,6 +49,8 @@ def snapshot_to_cache_payload(snapshot: MongoSnapshot) -> dict[str, Any]:
                 "name": transcript.name,
                 "title": transcript.title,
                 "fingerprint": transcript.fingerprint,
+                "quiz_questions": list(transcript.quiz_questions),
+                "source": transcript.source,
                 "segments": [
                     {"id": segment.id, "text": segment.text}
                     for segment in transcript.segments
@@ -110,6 +112,12 @@ def document_to_transcript(document: dict[str, Any]) -> TranscriptDocument:
         fingerprint=str(
             document.get("fingerprint") or document.get("source_sha256") or ""
         ),
+        quiz_questions=tuple(
+            str(question).strip()
+            for question in document.get("quiz_questions", [])
+            if str(question).strip()
+        ),
+        source=str(document.get("source") or ""),
     )
 
 
@@ -161,6 +169,8 @@ class MongoTranscriptRepository:
                         "title": 1,
                         "segments": 1,
                         "source_sha256": 1,
+                        "source": 1,
+                        "quiz_questions": 1,
                         "session_order": 1,
                     },
                 ).sort([("session_order", ASCENDING), ("name", ASCENDING)])
@@ -236,7 +246,7 @@ class MongoTranscriptRepository:
                     "origin": "gemini-mongodb",
                 }
             )
-        if not 3 <= len(safe_points) <= 5:
+        if not 2 <= len(safe_points) <= 5:
             return None
 
         generated_at = document.get("generated_at")
@@ -251,6 +261,59 @@ class MongoTranscriptRepository:
             "quiz_question_count": int(document.get("quiz_question_count", 0)),
         }
 
+    def save_user_lesson(self, transcript: TranscriptDocument) -> None:
+        """Upsert a validated user lesson while leaving seeded demo lessons untouched."""
+        if transcript.source != "user-submitted" or not transcript.name.startswith("user-"):
+            raise ValueError("Chỉ chấp nhận bài học đã được xác thực từ luồng người dùng.")
+        if not 3 <= len(transcript.title) <= 160:
+            raise ValueError("Tên bài học không hợp lệ.")
+        if not 1 <= len(transcript.segments) <= 600:
+            raise ValueError("Bài học phải có từ 1 đến 600 đoạn transcript.")
+        segment_ids = [segment.id for segment in transcript.segments]
+        if len(segment_ids) != len(set(segment_ids)):
+            raise ValueError("Bài học có mã đoạn bị trùng.")
+        if any(
+            not segment.id
+            or not segment.text.strip()
+            or len(segment.text) > 5_000
+            for segment in transcript.segments
+        ):
+            raise ValueError("Bài học chứa đoạn transcript không hợp lệ.")
+        if len(transcript.quiz_questions) > 100:
+            raise ValueError("Bài học có quá nhiều câu hỏi quiz.")
+        if len(transcript.fingerprint) != 64:
+            raise ValueError("Bài học thiếu fingerprint hợp lệ.")
+
+        now = datetime.now(timezone.utc)
+        try:
+            self.transcripts.update_one(
+                {"name": transcript.name},
+                {
+                    "$set": {
+                        "schema_version": 2,
+                        "session_id": transcript.name.removesuffix(".md"),
+                        "name": transcript.name,
+                        "title": transcript.title,
+                        "segments": [
+                            {"id": segment.id, "text": segment.text}
+                            for segment in transcript.segments
+                        ],
+                        "segment_count": len(transcript.segments),
+                        "quiz_questions": list(transcript.quiz_questions),
+                        "source": "user-submitted",
+                        "source_sha256": transcript_fingerprint(transcript),
+                        "updated_at": now,
+                    },
+                    "$setOnInsert": {
+                        "created_at": now,
+                        "session_order": 1_000_000_000 + int(now.timestamp()),
+                    },
+                },
+                upsert=True,
+            )
+        except PyMongoError as error:
+            raise MongoUnavailable("Không thể lưu bài học mới vào MongoDB.") from error
+
     def save_analysis(
         self,
         transcript: TranscriptDocument,
@@ -260,8 +323,8 @@ class MongoTranscriptRepository:
         quiz_question_count: int = 0,
     ) -> None:
         valid_ids = {segment.id for segment in transcript.segments}
-        if not 3 <= len(points) <= 5:
-            raise ValueError("Phân tích phải có từ 3 đến 5 trọng điểm.")
+        if not 2 <= len(points) <= 5:
+            raise ValueError("Phân tích phải có từ 2 đến 5 trọng điểm.")
         if any(
             not point.get("citations")
             or not set(point["citations"]).issubset(valid_ids)

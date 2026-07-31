@@ -7,6 +7,7 @@ import pytest
 
 from codebase import core
 from codebase.core import (
+    LessonInputError,
     answer_selection_followup,
     answer_selection_followup_with_key_rotation,
     answer_question,
@@ -21,6 +22,7 @@ from codebase.core import (
     summarize_with_key_rotation,
     transcript_fingerprint,
     transcript_from_path,
+    user_transcript_from_text,
 )
 from codebase.mongo_repository import (
     MongoSnapshot,
@@ -55,6 +57,63 @@ def test_normalized_transcript_keeps_parsed_segments_in_memory():
     assert len(transcript_fingerprint(transcript)) == 64
 
 
+def test_user_lesson_plain_text_is_segmented_and_keeps_its_own_quiz():
+    raw = (
+        "Zero-shot prompting yêu cầu mô hình thực hiện nhiệm vụ mà không có ví dụ mẫu. "
+        "Giảng viên giải thích đây là cách kiểm tra khả năng hiểu yêu cầu trực tiếp.\n\n"
+        "Few-shot prompting cung cấp một vài ví dụ trước câu hỏi thật để mô hình nhận ra "
+        "mẫu phản hồi mong muốn và làm theo cấu trúc đó."
+    )
+    transcript = user_transcript_from_text(
+        "Buổi 5 — Prompt engineering",
+        raw,
+        ["Zero-shot prompting là gì?", "  Zero-shot prompting là gì?  ", ""],
+    )
+    assert transcript.name.startswith("user-buoi-5-prompt-engineering-")
+    assert transcript.source == "user-submitted"
+    assert transcript.quiz_questions == ("Zero-shot prompting là gì?",)
+    assert transcript.segments
+    assert all(segment.id.startswith("U") for segment in transcript.segments)
+    assert all(len(segment.text) <= 900 for segment in transcript.segments)
+    assert len(transcript.fingerprint) == 64
+
+
+def test_user_lesson_preserves_explicit_unique_segment_ids():
+    raw = (
+        "[PE-001] Zero-shot prompting yêu cầu mô hình làm việc mà không kèm ví dụ mẫu. "
+        "Đây là nội dung đầu tiên cần ghi nhớ.\n"
+        "[PE-002] Few-shot prompting cung cấp một vài ví dụ trước câu hỏi thật. "
+        "Ví dụ giúp mô hình nhận ra cấu trúc phản hồi."
+    )
+    transcript = user_transcript_from_text("Prompt engineering", raw)
+    assert [segment.id for segment in transcript.segments] == ["PE-001", "PE-002"]
+
+
+def test_user_lesson_quiz_change_invalidates_analysis_without_creating_a_duplicate():
+    raw = (
+        "Nội dung transcript này đủ dài để kiểm tra fingerprint của toàn bộ đầu vào. "
+        "Khi danh sách quiz thay đổi, phân tích cũ không được dùng lại cho nhãn quiz mới."
+    )
+    without_quiz = user_transcript_from_text("Buổi fingerprint", raw)
+    with_quiz = user_transcript_from_text(
+        "Buổi fingerprint", raw, ["Nội dung nào liên quan quiz?"]
+    )
+    assert without_quiz.name == with_quiz.name
+    assert without_quiz.fingerprint != with_quiz.fingerprint
+
+
+@pytest.mark.parametrize(
+    ("title", "raw"),
+    [
+        ("x", "Nội dung " * 30),
+        ("Buổi hợp lệ", "quá ngắn"),
+    ],
+)
+def test_user_lesson_rejects_invalid_required_input(title, raw):
+    with pytest.raises(LessonInputError):
+        user_transcript_from_text(title, raw)
+
+
 def test_mongo_document_is_mapped_to_a_grounded_transcript():
     transcript = document_to_transcript(
         {
@@ -70,7 +129,12 @@ def test_mongo_document_is_mapped_to_a_grounded_transcript():
 
 
 def test_mongo_cache_payload_only_contains_pickle_safe_values():
-    transcript = transcript_from_path(TRANSCRIPT)
+    transcript = user_transcript_from_text(
+        "Buổi cache",
+        "Nội dung bài học được cung cấp bởi người dùng và đủ dài để kiểm tra việc "
+        "lưu quiz riêng trong cache MongoDB mà không làm lẫn dữ liệu của bài demo.",
+        ["Câu hỏi riêng của buổi cache?"],
+    )
     snapshot = MongoSnapshot(
         transcripts=(transcript,),
         quiz_questions=("Câu hỏi kiểm thử",),
@@ -82,6 +146,8 @@ def test_mongo_cache_payload_only_contains_pickle_safe_values():
     restored = snapshot_from_cache_payload(payload)
     assert restored.transcripts[0].name == transcript.name
     assert restored.transcripts[0].fingerprint == transcript.fingerprint
+    assert restored.transcripts[0].source == "user-submitted"
+    assert restored.transcripts[0].quiz_questions == ("Câu hỏi riêng của buổi cache?",)
     assert restored.segment_count == len(transcript.segments)
 
 

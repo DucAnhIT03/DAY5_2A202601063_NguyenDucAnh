@@ -3,7 +3,7 @@
 `taphoammo` là tên hệ thống và `taphoammo AI` là tên trợ lý xuất hiện trên toàn bộ
 giao diện. Phía sau, trợ lý sử dụng Gemini 2.5 Flash làm mô hình nền để xử lý dữ liệu.
 
-Prototype giúp học viên mở một buổi đã bỏ lỡ và nhận 3–5 điểm cần đọc trước, biết điểm nào liên quan quiz, bấm về đúng đoạn transcript gốc, và hỏi thêm trong phạm vi buổi học.
+Prototype giúp học viên mở một buổi đã bỏ lỡ và nhận 2–5 điểm cần đọc trước (mục tiêu 3–5 khi transcript đủ chất lượng), biết điểm nào liên quan quiz, bấm về đúng đoạn transcript gốc, và hỏi thêm trong phạm vi buổi học.
 
 ## Chạy dự án
 
@@ -21,9 +21,32 @@ python -m venv .venv
 
 Lệnh seed dùng **upsert**, có thể chạy lại an toàn. App đọc trực tiếp các collection
 `catchup_assistant.transcripts`, `catchup_assistant.quiz_bank` và
-`catchup_assistant.analyses`; badge màu xanh `MongoDB thật · 6 buổi` xác nhận nguồn
-dữ liệu đang hoạt động. MongoDB là bắt buộc: nếu mất kết nối, app dừng với hướng dẫn
+`catchup_assistant.analyses`; badge màu xanh `MongoDB thật · N buổi` xác nhận nguồn
+dữ liệu đang hoạt động (ban đầu có 6 bài demo). MongoDB là bắt buộc: nếu mất kết nối, app dừng với hướng dẫn
 khởi động database và tuyệt đối không tráo sang dữ liệu fallback.
+
+## Nhập bài học riêng
+
+Chọn **Thêm bài học** cạnh danh sách buổi học. Người dùng nhập tên buổi, transcript
+bắt buộc và quiz cũ tùy chọn (mỗi dòng một câu), hoặc tải tệp UTF-8 tối đa 512 KB:
+
+- `.txt` / `.md`: nội dung tệp được dùng làm transcript.
+- `.json`: dùng đúng contract `buoi_hoc`, `transcript`, `cau_hoi_quiz`.
+
+```json
+{
+  "buoi_hoc": "Buổi 5 — Prompt engineering",
+  "transcript": "Toàn văn transcript của một buổi...",
+  "cau_hoi_quiz": ["Zero-shot prompting là gì?"]
+}
+```
+
+Transcript thường được tự chia thành các đoạn có mã `Uxxxx-NNN`; nếu tệp đã có mã
+đoạn dạng `[PE-001]` thì hệ thống giữ nguyên và chặn mã trùng. Dữ liệu hợp lệ được
+lưu với `source=user-submitted`, quiz nằm riêng theo đúng bài và xuất hiện với nhãn
+**Bạn thêm**. Sáu bài **Demo** không bị xóa hoặc ghi đè; chạy lại script seed cũng
+chỉ upsert bộ demo và vẫn giữ bài người dùng. Nạp bài không tự gọi AI, người dùng chủ
+động chọn **Phân tích bằng taphoammo AI** sau khi kiểm tra transcript.
 
 Có thể đổi kết nối qua biến môi trường (xem `.env.example`):
 
@@ -68,7 +91,7 @@ toàn bộ lượt hỏi với citation tương ứng. Nút **Hỏi taphoammo AI
 khi không cần chọn một câu cụ thể. Lịch sử từng mini-chat cũng cuộn độc lập; tiêu đề
 và ô hỏi tiếp vẫn luôn ở ngoài vùng cuộn để người dùng không phải tìm lại thao tác.
 
-Kết quả taphoammo AI chỉ được lưu vào `analyses` sau khi có 3–5 trọng điểm và mọi citation
+Kết quả taphoammo AI chỉ được lưu vào `analyses` sau khi có 2–5 trọng điểm và mọi citation
 đều tồn tại trong đúng transcript. Bản ghi gắn fingerprint SHA-256 của transcript;
 khi nguồn thay đổi, phân tích cũ không được tái sử dụng. Có thể tạo/làm mới phân tích
 thật bằng giao diện hoặc CLI:

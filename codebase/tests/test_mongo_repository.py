@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
-from codebase.core import Segment, TranscriptDocument
+import pytest
+
+from codebase.core import Segment, TranscriptDocument, user_transcript_from_text
 from codebase.mongo_repository import MongoTranscriptRepository
 
 
@@ -78,3 +80,39 @@ def test_save_analysis_upserts_without_api_keys():
     stored = repository.analyses.update["$set"]
     assert stored["source"] == "gemini-api"
     assert "api_key" not in stored
+
+
+def test_save_user_lesson_writes_separate_source_and_quiz():
+    class Transcripts:
+        def __init__(self):
+            self.query = None
+            self.update = None
+
+        def update_one(self, query, update, upsert):
+            self.query = query
+            self.update = update
+            assert upsert is True
+
+    lesson = user_transcript_from_text(
+        "Buổi do người dùng nhập",
+        "Khái niệm thứ nhất được giảng viên giải thích rõ ràng trong transcript. "
+        "Khái niệm thứ hai có ví dụ minh họa để người học hiểu đúng nội dung bài.",
+        ["Khái niệm thứ nhất là gì?"],
+    )
+    repository = MongoTranscriptRepository.__new__(MongoTranscriptRepository)
+    repository.transcripts = Transcripts()
+    repository.save_user_lesson(lesson)
+
+    assert repository.transcripts.query == {"name": lesson.name}
+    stored = repository.transcripts.update["$set"]
+    assert stored["source"] == "user-submitted"
+    assert stored["quiz_questions"] == ["Khái niệm thứ nhất là gì?"]
+    assert stored["source_sha256"] == lesson.fingerprint
+    assert stored["segment_count"] == len(lesson.segments)
+
+
+def test_save_user_lesson_cannot_overwrite_a_demo_transcript():
+    repository = MongoTranscriptRepository.__new__(MongoTranscriptRepository)
+    repository.transcripts = object()
+    with pytest.raises(ValueError):
+        repository.save_user_lesson(TRANSCRIPT)

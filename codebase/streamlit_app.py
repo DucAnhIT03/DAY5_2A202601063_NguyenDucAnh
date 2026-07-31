@@ -1,8 +1,11 @@
+import json
+
 import streamlit as st
 
 try:
     from codebase.core import (
         KeyPoolError,
+        LessonInputError,
         answer_selection_followup_with_key_rotation,
         answer_with_key_rotation,
         configured_api_keys,
@@ -12,6 +15,7 @@ try:
         parse_api_keys,
         segment_map,
         summarize_with_key_rotation,
+        user_transcript_from_text,
     )
     from codebase.key_vault import (
         KeyVaultError,
@@ -31,6 +35,7 @@ try:
 except ModuleNotFoundError:
     from core import (
         KeyPoolError,
+        LessonInputError,
         answer_selection_followup_with_key_rotation,
         answer_with_key_rotation,
         configured_api_keys,
@@ -40,6 +45,7 @@ except ModuleNotFoundError:
         parse_api_keys,
         segment_map,
         summarize_with_key_rotation,
+        user_transcript_from_text,
     )
     from key_vault import (
         KeyVaultError,
@@ -148,7 +154,7 @@ try:
         load_mongo_data(mongo_uri(), mongo_database())
     )
     files = list(mongo_snapshot.transcripts)
-    quiz_questions = list(mongo_snapshot.quiz_questions)
+    default_quiz_questions = list(mongo_snapshot.quiz_questions)
 except MongoUnavailable as exc:
     mongo_error = str(exc)
     st.error(
@@ -166,7 +172,7 @@ if not files:
     st.error("Không có transcript nào để hiển thị.", icon=":material/database_off:")
     st.stop()
 
-labels = {transcript.name: transcript.title for transcript in files}
+lessons_by_name = {transcript.name: transcript for transcript in files}
 
 try:
     persisted_api_keys = load_key_pool()
@@ -310,6 +316,109 @@ def clear_persisted_key_pool() -> None:
         st.session_state.key_vault_error = str(exc)
 
 
+@st.dialog("Thêm dữ liệu bài học")
+def add_lesson_dialog() -> None:
+    st.write(
+        "Nhập một buổi mỗi lần. Sáu bài demo có sẵn vẫn được giữ nguyên; "
+        "bài mới sẽ lưu riêng trong MongoDB với nhãn “Bạn thêm”."
+    )
+    st.caption(
+        "Dán transcript hoặc tải TXT/Markdown. JSON có thể dùng đúng ba trường "
+        "`buoi_hoc`, `transcript`, `cau_hoi_quiz`. Nếu vừa tải file vừa dán, file được ưu tiên."
+    )
+
+    with st.form("lesson_import_form", border=False):
+        lesson_title = st.text_input(
+            "Tên buổi học",
+            placeholder="Ví dụ: Buổi 5 — Prompt engineering",
+            max_chars=160,
+        )
+        lesson_file = st.file_uploader(
+            "Tệp transcript hoặc JSON",
+            type=["txt", "md", "json"],
+            help="Tối đa 512 KB · mã hóa UTF-8.",
+        )
+        lesson_transcript = st.text_area(
+            "Transcript",
+            placeholder=(
+                "Dán toàn bộ nội dung buổi học tại đây. Có thể để trống khi đã tải tệp."
+            ),
+            height=220,
+            max_chars=500_000,
+        )
+        lesson_quiz = st.text_area(
+            "Quiz cũ (tùy chọn · mỗi dòng một câu)",
+            placeholder="Câu 1: ...\nCâu 2: ...",
+            height=110,
+            max_chars=50_000,
+        )
+        submitted = st.form_submit_button(
+            "Lưu bài học vào MongoDB",
+            icon=":material/save:",
+            type="primary",
+            width="stretch",
+        )
+
+    if not submitted:
+        return
+
+    effective_title = lesson_title
+    effective_transcript = lesson_transcript
+    quiz_values: list[str] = list(lesson_quiz.splitlines())
+    if lesson_file is not None:
+        if lesson_file.size > 512 * 1024:
+            st.error("Tệp bài học vượt quá giới hạn 512 KB.")
+            return
+        try:
+            uploaded_text = lesson_file.getvalue().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            st.error("Tệp bài học phải sử dụng mã hóa UTF-8.")
+            return
+
+        if lesson_file.name.lower().endswith(".json"):
+            try:
+                payload = json.loads(uploaded_text)
+            except json.JSONDecodeError:
+                st.error("Tệp JSON không đúng định dạng.")
+                return
+            if not isinstance(payload, dict):
+                st.error("JSON bài học phải là một object.")
+                return
+            effective_title = effective_title.strip() or str(payload.get("buoi_hoc", ""))
+            effective_transcript = str(payload.get("transcript", ""))
+            payload_quiz = payload.get("cau_hoi_quiz", [])
+            if payload_quiz and not isinstance(payload_quiz, list):
+                st.error("Trường `cau_hoi_quiz` trong JSON phải là một danh sách.")
+                return
+            quiz_values = [str(value) for value in payload_quiz] + quiz_values
+        else:
+            effective_transcript = uploaded_text
+
+    try:
+        transcript = user_transcript_from_text(
+            effective_title,
+            effective_transcript,
+            quiz_values,
+        )
+        get_mongo_repository(mongo_uri(), mongo_database()).save_user_lesson(transcript)
+    except (LessonInputError, MongoUnavailable, ValueError) as exc:
+        st.error(str(exc), icon=":material/error:")
+        return
+
+    load_mongo_data.clear()
+    reset_lesson()
+    st.session_state.lesson_import_target = transcript.name
+    st.session_state.lesson_import_notice = (
+        f"Đã lưu “{transcript.title}” · {len(transcript.segments)} đoạn"
+        + (
+            f" · {len(transcript.quiz_questions)} câu quiz"
+            if transcript.quiz_questions
+            else " · không có quiz cũ"
+        )
+    )
+    st.rerun()
+
+
 with st.sidebar:
     st.markdown("## :material/settings: Cài đặt")
     st.markdown("**Nguồn dữ liệu**")
@@ -428,6 +537,23 @@ with st.sidebar:
 
 api_keys = configured_api_keys(combined_key_input)
 
+lesson_options = [lesson.name for lesson in files]
+import_target = st.session_state.pop("lesson_import_target", None)
+selected_lesson_index = 3 if len(files) > 3 else 0
+if import_target in lesson_options:
+    st.session_state.pop("session_selector", None)
+    selected_lesson_index = lesson_options.index(import_target)
+import_notice = st.session_state.pop("lesson_import_notice", None)
+if import_notice:
+    st.toast(import_notice, icon=":material/check_circle:")
+
+
+def lesson_option_label(name: str) -> str:
+    lesson = lessons_by_name[name]
+    clean_title = lesson.title.replace("Transcript bài giảng (bản sạch) — ", "")
+    origin = "Bạn thêm" if lesson.source == "user-submitted" else "Demo"
+    return f"{origin} · {clean_title}"
+
 with st.container(horizontal=True, vertical_alignment="center", key="brandbar"):
     st.markdown(f"### :material/school: {BRAND_NAME}")
     st.space("stretch")
@@ -456,20 +582,31 @@ with st.container(border=True, key="lesson_header"):
         f"Chọn một buổi. {AI_DISPLAY_NAME} sẽ chỉ giữ lại phần cần đọc trước "
         "và dẫn về đúng nguồn."
     )
-    selected_name = st.selectbox(
-        "Buổi học đã bỏ lỡ",
-        options=[p.name for p in files],
-        index=3 if len(files) > 3 else 0,
-        format_func=lambda name: labels[name].replace(
-            "Transcript bài giảng (bản sạch) — ", ""
-        ),
-        key="session_selector",
-        on_change=reset_lesson,
-    )
+    with st.container(horizontal=True, vertical_alignment="bottom"):
+        selected_name = st.selectbox(
+            "Buổi học đã bỏ lỡ",
+            options=lesson_options,
+            index=selected_lesson_index,
+            format_func=lesson_option_label,
+            key="session_selector",
+            on_change=reset_lesson,
+        )
+        if st.button(
+            "Thêm bài học",
+            icon=":material/upload_file:",
+            type="primary",
+            help="Dán transcript hoặc tải TXT, Markdown, JSON.",
+        ):
+            add_lesson_dialog()
 
 path = next(p for p in files if p.name == selected_name)
 segments = segment_map(path)
 cache_key = path.name
+quiz_questions = (
+    list(path.quiz_questions)
+    if path.source == "user-submitted"
+    else list(default_quiz_questions)
+)
 repository = get_mongo_repository(mongo_uri(), mongo_database())
 try:
     stored_analysis = repository.get_analysis(path)
