@@ -1,8 +1,19 @@
-# SLIDE 01 — TAPHOAMMO
+# TAPHOAMMO — INVESTOR PITCH 5 PHÚT
 
-## Trợ lý bắt kịp bài học có kiểm chứng nguồn
+> Deck gồm 8 slide. Nội dung này đồng bộ với
+> `THUYET_TRINH_TAPHOAMMO_5_PHUT.html`.
 
-**Biến transcript dài thành phần kiến thức cần đọc trước**
+---
+
+# SLIDE 01 — Mỗi bài học đều có thể bắt kịp
+
+## Tầm nhìn
+
+**taphoammo biến transcript thành lộ trình học ưu tiên có thể kiểm chứng.**
+
+Người học quay lại đúng chỗ, đọc phần cần thiết và hỏi tiếp ngay trong ngữ cảnh.
+
+**Grounded learning layer cho nền tảng đào tạo**
 
 Nhóm thực hiện:
 
@@ -10,137 +21,154 @@ Nhóm thực hiện:
 
 ---
 
-# SLIDE 02 — Transcript dài chưa cho học viên biết nên đọc gì trước
+# SLIDE 02 — Tín hiệu nhu cầu
 
-## Vấn đề của người học
+## Nội dung đã có. Điều còn thiếu là một đường quay lại bài học đáng tin cậy.
 
-- Nghỉ một buổi nhưng phải đọc toàn bộ transcript.
-- Nội dung quan trọng bị trộn với chào hỏi, chuyển ý và hoạt động lớp.
-- Đọc hết tốn thời gian; đọc lướt dễ bỏ sót kiến thức nền.
-- Bản tóm tắt AI tự do khó kiểm chứng và có thể thêm thông tin ngoài bài.
+Mẫu hành vi ẩn danh **n=34**, chọn từ **369 người dùng**:
 
-| Dữ liệu khảo sát | Kết quả |
+- **24/34** có ít nhất một yêu cầu tóm tắt hoặc giải thích.
+- **34/34** tương tác với một đoạn nội dung được chọn.
+- **21/34** có từ hai lượt hỏi trở lên trong cửa sổ dữ liệu.
+
+Trên toàn bộ tập chatlog:
+
+| Bằng chứng | Kết quả |
 |---|---:|
-| Buổi học | **6** |
-| Đoạn transcript | **700** |
-| Đoạn hoạt động lớp | **55** |
-| Đoạn có tín hiệu “không nghe rõ” | **103** |
+| Tin nhắn thật | **2.522** |
+| Cặp hỏi–đáp | **1.261** |
+| Phản hồi tutor thiếu dẫn nguồn | **46,2%** |
+
+> Nguồn: VLearn Product Analytics — Production, 22–29/07/2026. Mẫu n=34
+> được chọn tái lập bằng SHA-256 trên user_id ẩn danh, gồm 98 tin nhắn học
+> viên trong 48 hội thoại. Đây là tín hiệu hành vi, không phải khảo sát tự
+> khai hay bằng chứng traction thương mại.
 
 ---
 
-# SLIDE 03 — taphoammo tạo bản đồ đọc ưu tiên, không chỉ tóm tắt
+# SLIDE 03 — Giá trị sản phẩm
 
-## Giá trị cốt lõi
+## Từ một transcript dài đến ba quyết định học tập rõ ràng
 
-- Chỉ xử lý **một buổi học mỗi lần**.
-- Chọn **2–5 trọng điểm** cần đọc trước.
-- Mỗi trọng điểm có **mã đoạn nguồn** để kiểm chứng.
-- Chỉ đánh dấu liên quan quiz khi có quiz cũ để đối chiếu.
-- Cho phép hỏi đáp trong phạm vi transcript đang mở.
-- Không đủ căn cứ thì **từ chối**, không suy đoán.
+### 01 · Ưu tiên
 
-> **Đọc gì trước · Vì sao cần đọc · Kiểm chứng ở đâu**
+**Đọc gì trước?**
 
----
+2–5 trọng điểm đưa người học vào phần có giá trị cao nhất.
 
-# SLIDE 04 — Một luồng xuyên suốt từ dữ liệu đến kết quả
+### 02 · Kiểm chứng
 
-```mermaid
-flowchart LR
-    A["Chọn hoặc nhập bài"] --> B["Kiểm tra và chia đoạn"]
-    B --> C["Lưu MongoDB"]
-    C --> D["Gemini phân tích"]
-    D --> E["Hậu kiểm citation"]
-    E --> F["Trọng điểm và hỏi đáp"]
-```
+**Tin vào đâu?**
 
-## Cách hệ thống hoạt động
+Mỗi kết luận mở đúng đoạn transcript làm căn cứ.
 
-1. Nhập transcript bằng TXT, Markdown, JSON hoặc chọn bài demo.
-2. Chuẩn hóa nội dung và sinh mã đoạn ổn định.
-3. Tạo fingerprint cho đúng phiên bản transcript và quiz.
-4. Gemini trả kết quả theo JSON Schema cố định.
-5. Backend kiểm tra số lượng, trùng lặp và citation trước khi lưu.
+### 03 · Hiểu sâu
 
-**Transcript hoặc quiz thay đổi → fingerprint thay đổi → không dùng lại kết quả AI cũ.**
+**Hỏi tiếp thế nào?**
+
+Bôi đen một đoạn và đối thoại với AI ngay tại chỗ.
+
+> Không tạo thêm một kho nội dung — tạo đường vào tốt hơn cho nội dung đã có.
 
 ---
 
-# SLIDE 05 — Trọng điểm được chọn bằng tiêu chí học tập rõ ràng
+# SLIDE 04 — Trải nghiệm sản phẩm
 
-## Nội dung được ưu tiên
+## Một màn hình đưa người học từ “bỏ lỡ” đến “bắt kịp”
 
-- Khái niệm hoặc kỹ thuật được giải thích.
-- Quan hệ nguyên nhân – kết quả.
-- Quy trình hoặc chuỗi bước.
-- Ví dụ thực sự giúp hiểu bài.
-- Nội dung được giảng viên nhấn mạnh.
+1. **Chọn bài hoặc nhập nội dung.**
+2. **Đọc trọng điểm có dẫn nguồn.**
+3. **Hỏi tiếp ngay trong ngữ cảnh.**
 
-## Nội dung bị loại
+Giao diện kết hợp trong một luồng:
 
-- Chào hỏi, chuyển ý và hành chính.
-- Hoạt động lớp không tạo kiến thức mới.
-- Trao đổi ngoài chuyên môn.
-- Nội dung lặp hoặc phần đệm.
-
-**Gemini dùng độ ngẫu nhiên thấp, trả 2–5 mục và mỗi mục bắt buộc có citation hợp lệ.**
+- Danh sách bài học.
+- Bản đồ 2–5 trọng điểm cần nắm.
+- Citation mở đúng đoạn transcript.
+- Chat xuất hiện ngay dưới phần bôi đen và tiếp tục được nhiều lượt.
 
 ---
 
-# SLIDE 06 — AI trả lời trọng tâm nhờ context hẹp và guardrail
+# SLIDE 05 — Lợi thế kỹ thuật bước đầu
 
-## Pipeline hỏi đáp
+## Grounded AI biến độ tin cậy thành một phần của trải nghiệm
 
-**Câu hỏi → Retrieval → Tối đa 4 đoạn liên quan → Gemini → Hậu kiểm**
+**Nguyên tắc sản phẩm: mọi kết luận đều có đường về nguồn.**
 
-- Hỗ trợ tiếng Việt có dấu và không dấu.
-- Loại từ dừng, ưu tiên từ khóa hiếm và cụm từ liên tiếp.
-- Chỉ gửi các đoạn liên quan thay vì toàn bộ transcript.
-- AI phải kết luận ngay, trả lời ngắn và dẫn nguồn.
-- `supported=false` hoặc không còn citation hợp lệ → từ chối.
+| Lớp kiểm soát | Giá trị |
+|---|---|
+| **Bound** | Khóa phân tích vào đúng phiên bản nội dung |
+| **Retrieve** | Chỉ lấy context vừa đủ cho câu hỏi |
+| **Verify** | Hậu kiểm citation trong transcript đang mở |
+| **Fail closed** | Thiếu căn cứ thì từ chối thay vì đoán |
 
-## Hỏi ngay tại phần bôi đen
+Model có thể thay đổi; lớp kiểm chứng, phiên bản hóa và dữ liệu học tập vẫn
+thuộc về taphoammo.
 
-- Backend xác minh phần chọn thuộc đúng đoạn nguồn.
-- Câu trả lời xuất hiện ngay dưới đoạn, không chuyển sang trang khác.
-- Có thể hỏi tiếp nhiều lượt trong cùng ngữ cảnh.
-- Chat dài cuộn trong khung riêng.
-
----
-
-# SLIDE 07 — Dữ liệu và AI đều có cơ chế vận hành an toàn
-
-## Dữ liệu thật trong runtime
-
-- MongoDB 8.0 chạy bằng Docker và lưu dữ liệu bền vững.
-- Giữ nguyên **6 bài demo** từ data pack đã ẩn danh.
-- Bài người dùng nhập có nhãn **Bạn thêm** và không ghi đè demo.
-- Analysis được lưu theo fingerprint.
-
-## Gemini API key pool
-
-- Nhập nhiều key, mỗi dòng một key.
-- Round-robin và tự chuyển slot khi hết quota.
-- Key được mã hóa bằng Windows DPAPI.
-- Không commit key; giao diện chỉ hiển thị key đã che.
-- Non-streaming: không đưa câu trả lời dở dang ra giao diện.
+**Lợi thế tích lũy tiếp theo:** feedback thật để đánh giá trọng điểm và chất
+lượng trả lời.
 
 ---
 
-# SLIDE 08 — Prototype chạy thật và có đường phát triển rõ ràng
+# SLIDE 06 — Giả thuyết kinh doanh
 
-## Kết quả hiện tại
+## B2B2C: bắt đầu từ nơi transcript đã sẵn sàng
 
-- **32/32 unit test đạt**.
-- Golden set gồm **20 tình huống**.
-- Có kiểm thử câu đúng nguồn, câu mơ hồ, câu ngoài phạm vi và citation giả.
-- Giao diện hoàn chỉnh: Tổng quan, Trọng điểm, Transcript và Hỏi AI.
+### Người mua
 
-## Hướng phát triển
+Trường học, trung tâm và học viện doanh nghiệp cần hỗ trợ học viên nhất quán
+ở quy mô lớn.
 
-- Hybrid retrieval: lexical + embedding.
-- Semantic verifier cho từng mệnh đề và citation.
-- Đăng nhập, phân quyền và dữ liệu riêng từng người dùng.
-- Secret Manager và hạ tầng production đa nền tảng.
+### Đơn vị giá trị
 
-> **taphoammo không thay thế nguồn học; taphoammo dẫn người học đến đúng phần của nguồn học nhanh hơn.**
+Mô hình thuê bao dự kiến tính theo người học hoạt động, khóa học hoặc giấy
+phép cấp tổ chức.
+
+### Đường mở rộng
+
+**Pilot 1–2 khóa có transcript → đo hiệu quả → license cấp tổ chức → tích hợp
+toàn LMS**
+
+> Đây là giả thuyết mô hình kinh doanh và go-to-market, chưa phải doanh thu
+> hay traction thương mại đã đạt được.
+
+---
+
+# SLIDE 07 — Từ prototype đến thị trường
+
+## Đã chứng minh luồng sản phẩm. 12 tháng tới chứng minh giá trị kinh doanh.
+
+### Đã xây
+
+- Prototype end-to-end: nhập nội dung → trọng điểm → citation → hỏi tại chỗ.
+- 6 bài demo được giữ nguyên; đầu vào người dùng được lưu riêng.
+- **32/32 kiểm thử tự động đạt** tại lần kiểm tra gần nhất.
+
+### Lộ trình dự kiến
+
+| Thời gian | Mục tiêu |
+|---|---|
+| **0–3 tháng** | Pilot 1–2 khóa; thu feedback thật và chốt bộ chỉ số |
+| **3–6 tháng** | Multi-tenant, quyền riêng tư, dashboard đánh giá AI, kết nối LMS |
+| **6–12 tháng** | Chuyển pilot thành hợp đồng đầu tiên và mở rộng theo chương trình |
+
+---
+
+# SLIDE 08 — Đề nghị hợp tác và đầu tư
+
+## Cùng biến mọi nội dung học thành một hành trình có thể bắt kịp
+
+- **2 đối tác pilot** có khóa học đã sẵn transcript.
+- **Cố vấn EdTech và LMS** về tích hợp, vận hành và go-to-market.
+- **Vòng pre-seed** để sản phẩm hóa, đánh giá AI và triển khai pilot.
+
+### Phân bổ nguồn lực dự kiến
+
+| Hạng mục | Tỷ trọng |
+|---|---:|
+| Sản phẩm | **45%** |
+| AI và đánh giá | **30%** |
+| Bảo mật và tích hợp LMS | **15%** |
+| Vận hành pilot | **10%** |
+
+**Mục tiêu 12 tháng: pilot → đo lường → hợp đồng đầu tiên.**
