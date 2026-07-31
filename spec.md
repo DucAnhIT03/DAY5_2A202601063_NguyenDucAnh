@@ -10,9 +10,9 @@ Hướng: **A — VLearn** · Loại: **Tính năng mới** · Trạng thái: **
 - **Workflow:** mở buổi đã lỡ → dò nội dung → chọn phần cần đọc → kiểm chứng transcript → hỏi thêm nếu còn vướng.
 - **Core JTBD:** nhanh chóng xác định phần cần đọc trước trong một buổi đã lỡ để không hổng kiến thức ở quiz/buổi kế tiếp.
 - **Problem statement (không AI):** học viên trở lại sau một buổi nghỉ phải đọc transcript dài mà không biết phần nào cần ưu tiên; đọc lướt dễ bỏ sót, đọc hết tốn thời gian.
-- **Evidence mining kiểm lại được:** script/parser trong `codebase/core.py` đọc đủ 6 transcript, 700 đoạn. Có 55/700 đoạn (7,9%) được nhà cung cấp dữ liệu gắn `[Hoạt động lớp: …]`; 645 đoạn còn lại có nội dung. 103/700 đoạn chứa `[không nghe rõ]`, là tín hiệu không nên tự suy diễn. Cách đếm: parse mã `Txx-NNN`, đếm literal hai nhãn trên.
-- **Ví dụ nguồn:** `[T04-015]` quan hệ AI/ML/DL/GenAI; `[T04-025]` giới hạn symbolic AI; `[T04-029]` nợ duy trì expert system; `[T04-030]` deep learning; `[T04-032]` khác biệt feature engineering. Repo nộp chỉ ghi mã, không sao chép data pack.
-- **Giới hạn evidence:** số đếm trên chứng minh transcript có phần đệm và phần mơ hồ, chưa chứng minh pain của học viên. `TODO-NGƯỜI-THẬT`: khảo sát ≥20 người hoặc bổ sung mining chatlog đúng pain, log nguyên văn và tỷ lệ ≥50%.
+- **Evidence mining kiểm lại được — Phan Văn Hiếu (2A202601227):** `scripts/mining_transcript.py` đọc đủ 6 transcript, 700 đoạn. Có 55/700 đoạn (7,9%) được nhà cung cấp dữ liệu gắn `[Hoạt động lớp: …]`; 645 đoạn còn lại có nội dung. 103/700 đoạn chứa `[không nghe rõ]`, là tín hiệu không nên tự suy diễn. Cách đếm: parse mã `Txx-NNN`, đếm literal hai nhãn trên. Kết quả tái lập nằm tại `eval/evidence-mining-report.md`.
+- **Mã nguồn đã được Phan Văn Hiếu đối chiếu:** `[T04-015]` quan hệ AI/ML/DL/GenAI; `[T04-025]` giới hạn symbolic AI; `[T04-029]` nợ duy trì expert system; `[T04-030]` deep learning; `[T04-032]` khác biệt feature engineering. Repo nộp chỉ ghi mã, không sao chép data pack.
+- **Giới hạn evidence được ghi nhận:** số đếm trên chứng minh transcript có phần đệm và phần mơ hồ, chưa chứng minh pain của học viên. `TODO-NGƯỜI-THẬT`: khảo sát ≥20 người hoặc bổ sung mining chatlog đúng pain, log nguyên văn và tỷ lệ ≥50%.
 
 ## §2. Impact & quyết định chọn
 
@@ -81,7 +81,8 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 
 ## §8. Phân công & kế hoạch
 
-- Nguyễn Đức Anh: chủ dự án; spec, code, prompt, eval, demo. Nếu là bài nhóm, thay bằng tên thật từng người trước nộp.
+- Nguyễn Đức Anh: chủ dự án; spec, core AI, backend, giao diện, prompt, eval và demo.
+- Phan Văn Hiếu (2A202601227): mining transcript/chatlog, thu thập evidence và đối chiếu mã trích dẫn; phụ trách `scripts/mining_transcript.py`, `eval/evidence-mining-report.md` và `reflection/PhanVanHieu.md`.
 - `TODO-NGƯỜI-THẬT`: điền ≥3 willing users có tên và vai; validation ≥5 người ngoài nhóm.
 - Ba câu hỏi validation: “Bạn chọn đọc gì trước?” · “Bạn có kiểm chứng nguồn không?” · “Điểm nào làm bạn không tin/không hiểu?”
 

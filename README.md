@@ -111,8 +111,11 @@ gắn nhãn quiz. Chỉ nhập quiz khi có nguồn được phép sử dụng.
 | AI Spec | `spec.md` |
 | Prototype | `codebase/` |
 | Golden set | `eval/golden-set.csv` |
+| Mining transcript & đối chiếu citation — Phan Văn Hiếu | `scripts/mining_transcript.py` |
+| Báo cáo evidence — Phan Văn Hiếu | `eval/evidence-mining-report.md` |
 | Feedback log | `validation/feedback-log.md` |
 | Reflection | `reflection/NguyenDucAnh.md` |
+| Reflection — Phan Văn Hiếu | `reflection/PhanVanHieu.md` |
 
 ## Thành viên & phân công
 
