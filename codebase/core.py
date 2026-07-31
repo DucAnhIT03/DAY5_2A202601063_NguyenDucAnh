@@ -62,6 +62,8 @@ DEMO_SUMMARIES: dict[str, list[dict[str, Any]]] = {
     ]
 }
 
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+
 
 def session_files() -> list[Path]:
     return sorted(TRANSCRIPT_DIR.glob("transcript-*-clean.md"))
@@ -108,6 +110,10 @@ def ai_available(explicit_key: str | None = None) -> bool:
     return bool(_api_key(explicit_key))
 
 
+def _model_name() -> str:
+    return os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+
+
 def _extract_json(text: str) -> Any:
     match = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
     payload = match.group(1) if match else text
@@ -137,14 +143,15 @@ TRANSCRIPT:
 {context}
 """
     client = genai.Client(api_key=_api_key(api_key))
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    model = _model_name()
+    response = client.models.generate_content(model=model, contents=prompt)
     result = _extract_json(response.text)
     valid_ids = {s.id for s in segments}
     for item in result:
         item["citations"] = [c for c in item.get("citations", []) if c in valid_ids]
         if not item["citations"]:
             raise ValueError("AI trả về điểm chính không có trích dẫn hợp lệ.")
-    log_trace("summary", path.name, {"count": len(result), "model": "gemini-2.5-flash"})
+    log_trace("summary", path.name, {"count": len(result), "model": model})
     return result[:5]
 
 
@@ -200,7 +207,8 @@ CÂU HỎI: {question}
 CONTEXT:
 {context}"""
     client = genai.Client(api_key=_api_key(api_key))
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    model = _model_name()
+    response = client.models.generate_content(model=model, contents=prompt)
     data = _extract_json(response.text)
     if data.get("answer") == "KHONG_DU_CAN_CU":
         return {"answer": "Mình chưa tìm thấy căn cứ đủ rõ trong transcript buổi này.", "citations": [], "grounded": False, "mode": "ai"}
@@ -208,7 +216,7 @@ CONTEXT:
     citations = [c for c in data.get("citations", []) if c in valid_ids]
     if not citations:
         return {"answer": "Mình chưa tìm thấy căn cứ đủ rõ trong transcript buổi này.", "citations": [], "grounded": False, "mode": "ai"}
-    log_trace("qa", path.name, {"question": question, "citations": citations, "model": "gemini-2.5-flash"})
+    log_trace("qa", path.name, {"question": question, "citations": citations, "model": model})
     return {"answer": data["answer"], "citations": citations, "grounded": True, "mode": "ai"}
 
 
