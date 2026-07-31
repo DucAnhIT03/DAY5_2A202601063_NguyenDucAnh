@@ -33,15 +33,15 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 ## §4. Thiết kế
 
 - **Lát cắt một câu:** Khi học viên mở một buổi mình đã bỏ lỡ, hệ thống chọn 2–5 điểm có căn cứ (mục tiêu 3–5 khi đủ nội dung) và đối chiếu quiz cũ để họ biết phần nào đọc trước, đồng thời luôn cho phép mở đúng đoạn transcript gốc.
-- **Non-goals:** không chạy mọi buổi; không thay transcript; không kết luận học viên đã hiểu; không sinh quiz; không trả lời ngoài buổi đang mở.
-- **Mức:** Working ở parser, điều hướng citation, guardrail, Gemini summary/Q&A, mini-chat giải thích ngay tại phần transcript được bôi đen, nhập transcript/quiz theo từng bài và persistence MongoDB. Sáu bài demo được giữ nguyên; bài người dùng có nhãn riêng và không ghi đè demo. Khi chưa có phân tích Gemini, hệ thống chỉ trích xuất nguyên văn từ transcript đang lưu và ghi rõ trạng thái. Data pack chưa cung cấp quiz thật nên hệ thống để trống quiz thay vì dùng câu mẫu.
+- **Non-goals:** không chạy mọi buổi; không thay transcript; không kết luận học viên đã hiểu; không sinh quiz; không dùng web để trả lời câu ngoài buổi đang mở.
+- **Mức:** Working ở parser, điều hướng citation, guardrail an toàn/phạm vi, Gemini summary/Q&A, mini-chat giải thích ngay tại phần transcript được bôi đen, nhập transcript/quiz theo từng bài và persistence MongoDB. Mọi câu trả lời grounded có tên nguồn, mã đoạn và trích đoạn thật do backend lấy từ dữ liệu; nguồn web là tùy chọn đối chiếu cho câu đã thuộc bài và chỉ nhận URL từ grounding metadata. Sáu bài demo được giữ nguyên; bài người dùng có nhãn riêng và không ghi đè demo. Khi chưa có phân tích Gemini, hệ thống chỉ trích xuất nguyên văn từ transcript đang lưu và ghi rõ trạng thái. Data pack chưa cung cấp quiz thật nên hệ thống để trống quiz thay vì dùng câu mẫu.
 - **Automation:** **Augment**. Sai trọng tâm có thể gây học sai/mất điểm; user quyết định sau khi xem trích dẫn, sửa rẻ hơn việc tin output không kiểm chứng.
 
 | Nguyên tắc | Vị trí cụ thể |
 |---|---|
 | G1 — rõ khả năng | Sidebar ghi “chỉ xử lý một buổi chủ động mở” |
 | G2 — rõ độ tin | badge phân biệt “taphoammo AI · đã lưu MongoDB” và “trích xuất từ transcript thật” |
-| G10 — thu hẹp khi nghi ngờ | Q&A từ chối khi không đủ overlap/citation |
+| G10 — thu hẹp khi nghi ngờ | Q&A hỏi người dùng có chọn nhầm bài khi không đủ căn cứ; yêu cầu không an toàn bị từ chối |
 | G11 — giải thích vì sao | mỗi nhãn quiz có `quiz_reason` |
 | G8 — gạt bỏ dễ | user có thể bỏ bản đồ và mở transcript gốc |
 | G9 — sửa dễ | đổi câu hỏi hoặc chọn lại buổi, không khóa flow |
@@ -77,7 +77,7 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 - **Coverage:** pass khi output có 2–5 điểm, không chứa đoạn hoạt động lớp.
 - **Quality bar chốt:** ≥85% tổng case; 100% case nguồn sự thật phải pass; 0 citation bịa.
 - Golden set: `eval/golden-set.csv` (20 case, phủ đủ 4 lớp).
-- Unit test hiện tại: 32/32 pass, gồm validation/chia đoạn dữ liệu người dùng, lưu quiz riêng theo bài và vô hiệu hóa phân tích cũ khi quiz thay đổi. Đã chạy Gemini thật cho `transcript-04-clean.md`, lưu 4 trọng điểm có citation vào `catchup_assistant.analyses`; luồng chat và mini-chat nhiều lượt ngay tại phần transcript được chọn đều đã được kiểm tra với Gemini và citation thật. Q&A hiện dùng retrieval có dấu/không dấu, structured output, thinking budget, kiểm tra `supported`, citation và giới hạn độ dài trước khi hiển thị. `TODO-NGƯỜI-THẬT`: chấm trọn golden set và ghi kết quả quan sát thật vào `eval/run-01.csv`.
+- Unit test hiện tại: 47/47 pass, gồm validation/chia đoạn dữ liệu người dùng, guardrail prompt injection/nội dung gây hại/câu ngoài bài, hợp đồng nguồn nội bộ, mini-chat và nguồn web grounding. Đã chạy Gemini thật cho `transcript-04-clean.md`, lưu 4 trọng điểm có citation vào `catchup_assistant.analyses`; luồng chat và mini-chat nhiều lượt ngay tại phần transcript được chọn đều đã được kiểm tra với Gemini và citation thật. Q&A dùng retrieval có dấu/không dấu, structured output, thinking budget, quyết định `answer/outside_lesson/inappropriate`, hậu kiểm citation và giới hạn độ dài trước khi hiển thị. `TODO-NGƯỜI-THẬT`: chấm trọn golden set và ghi kết quả quan sát thật vào `eval/run-01.csv`.
 
 ## §8. Phân công & kế hoạch
 
@@ -95,3 +95,4 @@ Chọn lát cắt một buổi vì demo được end-to-end và giữ được �
 | 2026-07-31 | Đổi nhận diện sản phẩm và trợ lý thành taphoammo | Thống nhất tên trên tab trình duyệt, giao diện chính, chat và mini-chat |
 | 2026-07-31 | Thêm retrieval có trọng số, structured output, thinking budget và hậu kiểm câu trả lời | Giảm trả lời lan man, lặp ý, citation sai và suy diễn ngoài transcript |
 | 2026-07-31 | Cho nhập TXT/Markdown/JSON và quiz riêng theo bài | Người dùng dùng dữ liệu thật của mình trong khi vẫn giữ 6 bài demo |
+| 2026-07-31 | Thêm guardrail an toàn/phạm vi, evidence có tên nguồn + trích đoạn và web grounding tùy chọn | Từ chối đúng câu không phù hợp, hỏi lại khi chọn nhầm bài và không hiển thị nguồn do model tự bịa |

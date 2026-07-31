@@ -197,6 +197,7 @@ st.session_state.setdefault("key_vault_saved_count", len(persisted_api_keys))
 st.session_state.setdefault("key_vault_error", initial_vault_error)
 st.session_state.setdefault("point_selector", 0)
 st.session_state.setdefault("active_view", "Tổng quan")
+st.session_state.setdefault("qa_include_web", False)
 
 
 def reset_lesson() -> None:
@@ -206,6 +207,7 @@ def reset_lesson() -> None:
     st.session_state.inline_focus = {}
     st.session_state.point_selector = 0
     st.session_state.active_view = "Tổng quan"
+    st.session_state.qa_include_web = False
 
 
 def go_to_view(view_name: str) -> None:
@@ -282,6 +284,61 @@ def inline_pending_for(component_key: str) -> dict | None:
     if isinstance(pending, dict) and pending.get("component_key") == component_key:
         return pending
     return None
+
+
+def render_answer_sources(sources: list[dict], citations: list[str]) -> None:
+    """Show a compact source line plus server-built evidence details."""
+    safe_sources = [source for source in sources if isinstance(source, dict)]
+    if not safe_sources:
+        if citations:
+            st.caption(
+                ":material/source: Nguồn: "
+                + ", ".join(f"[{citation}]" for citation in citations)
+            )
+        return
+
+    source_labels: list[str] = []
+    for source in safe_sources:
+        title = str(source.get("title") or "Nguồn")
+        reference = str(source.get("id") or "")
+        source_labels.append(
+            f"{title} · [{reference}]"
+            if source.get("type") == "lesson"
+            else f"{title} · web"
+        )
+    st.caption(
+        ":material/verified: Nguồn kiểm chứng: "
+        + " · ".join(source_labels)
+    )
+
+    with st.expander(
+        f"Xem nội dung nguồn ({len(safe_sources)})",
+        icon=":material/library_books:",
+    ):
+        for index, source in enumerate(safe_sources, 1):
+            with st.container(border=True):
+                title = str(source.get("title") or "Nguồn")
+                reference = str(source.get("id") or "")
+                origin = str(source.get("origin") or "")
+                if source.get("type") == "web":
+                    st.markdown(f"**{index}. {title}**")
+                    url = str(source.get("url") or "")
+                    if url.startswith(("https://", "http://")):
+                        st.link_button(
+                            "Mở nguồn web",
+                            url,
+                            icon=":material/open_in_new:",
+                        )
+                else:
+                    st.markdown(f"**{index}. {title} · [{reference}]**")
+                if origin:
+                    st.caption(origin)
+                excerpt = str(source.get("excerpt") or "").strip()
+                if excerpt:
+                    st.caption(
+                        str(source.get("excerpt_label") or "Nội dung hỗ trợ")
+                    )
+                    st.write(f"“{excerpt}”")
 
 
 def reset_key_pool() -> None:
@@ -840,7 +897,10 @@ elif view == "Trọng điểm":
                         lambda key=source_selection_key: queue_inline_followup(key)
                     ),
                 )
-                st.caption(f":material/verified: Nguồn [{citation}] · trích nguyên văn")
+                st.caption(
+                    f":material/verified: Nguồn: {path.title} · "
+                    f"[{citation}] · trích nguyên văn"
+                )
 
 elif view == "Transcript":
     with st.container(border=True, key="transcript_panel"):
@@ -908,6 +968,16 @@ else:
                     color="green",
                     icon=":material/auto_awesome:",
                 )
+                include_web_sources = st.toggle(
+                    "Bổ sung nguồn web",
+                    key="qa_include_web",
+                    help=(
+                        "Chỉ áp dụng khi câu hỏi đã thuộc bài học. Nguồn web là "
+                        "phần đối chiếu bổ sung và luôn có URL thật."
+                    ),
+                )
+            else:
+                include_web_sources = False
             if st.session_state.messages and st.button(
                 "Xoá", icon=":material/delete_sweep:", key="clear_chat"
             ):
@@ -916,8 +986,14 @@ else:
         if api_keys:
             st.caption(
                 f"Hỏi trực tiếp {AI_DISPLAY_NAME} tại đây; không cần phân tích buổi học trước. "
-                f"{AI_DISPLAY_NAME} chỉ dùng transcript đang mở và luôn dẫn nguồn khi trả lời."
+                f"{AI_DISPLAY_NAME} ưu tiên bài đang mở, từ chối câu ngoài phạm vi "
+                "và luôn dẫn tên nguồn cùng trích đoạn khi trả lời."
             )
+            if include_web_sources:
+                st.caption(
+                    ":material/public: Nguồn web đang bật · chỉ bổ sung cho câu hỏi "
+                    "đã có căn cứ trong bài, không dùng để trả lời câu hỏi lạc đề."
+                )
         else:
             st.caption(
                 f"Chưa có API key nên {AI_DISPLAY_NAME} chỉ tìm đoạn transcript liên quan."
@@ -950,15 +1026,19 @@ else:
                         else ":material/person:",
                     ):
                         st.write(message["content"])
-                        if message.get("citations"):
-                            st.caption(
-                                "Nguồn: "
-                                + ", ".join(f"[{c}]" for c in message["citations"])
+                        render_answer_sources(
+                            list(message.get("sources") or []),
+                            list(message.get("citations") or []),
+                        )
+                        if message.get("mode") in {"ai", "ai_web"}:
+                            web_label = (
+                                " · có đối chiếu web"
+                                if message.get("mode") == "ai_web"
+                                else ""
                             )
-                        if message.get("mode") == "ai":
                             st.caption(
                                 f":material/auto_awesome: {AI_DISPLAY_NAME} · "
-                                f"key slot {message['slot'] + 1}"
+                                f"key slot {message['slot'] + 1}{web_label}"
                             )
 
         typed_question = st.chat_input(
@@ -989,6 +1069,7 @@ else:
                     api_keys,
                     st.session_state.gemini_key_cursor,
                     on_attempt=show_qa_attempt,
+                    include_web=include_web_sources,
                 )
                 result = rotation.value
                 st.session_state.gemini_key_cursor = rotation.next_cursor
@@ -998,6 +1079,7 @@ else:
             result = {
                 "answer": f"{AI_DISPLAY_NAME} đang tạm thời chưa trả lời được: {exc}",
                 "citations": [],
+                "sources": [],
                 "mode": "error",
             }
             rotation = None
@@ -1006,6 +1088,7 @@ else:
                 "role": "assistant",
                 "content": result["answer"],
                 "citations": result["citations"],
+                "sources": result.get("sources", []),
                 "mode": result.get("mode"),
                 "slot": rotation.used_slot if rotation else None,
             }
@@ -1052,6 +1135,7 @@ if isinstance(pending_inline, dict):
         result = {
             "answer": f"Chưa thể trả lời tại đoạn này: {exc}",
             "citations": [],
+            "sources": [],
             "mode": "error",
         }
 
@@ -1062,6 +1146,7 @@ if isinstance(pending_inline, dict):
             "question": followup_question if request_kind == "followup" else None,
             "segment_id": selected_segment_id,
             "answer": result["answer"],
+            "sources": result.get("sources", []),
             "mode": result.get("mode"),
             "slot": rotation.used_slot if rotation else None,
         }

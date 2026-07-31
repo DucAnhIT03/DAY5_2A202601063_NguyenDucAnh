@@ -142,7 +142,7 @@ toàn LMS**
 
 - Prototype end-to-end: nhập nội dung → trọng điểm → citation → hỏi tại chỗ.
 - 6 bài demo được giữ nguyên; đầu vào người dùng được lưu riêng.
-- **32/32 kiểm thử tự động đạt** tại lần kiểm tra gần nhất.
+- **47/47 kiểm thử tự động đạt** tại lần kiểm tra gần nhất.
 
 ### Lộ trình dự kiến
 

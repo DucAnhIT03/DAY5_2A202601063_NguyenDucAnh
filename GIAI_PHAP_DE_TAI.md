@@ -58,7 +58,8 @@ Prototype không:
 - Tóm tắt đồng thời nhiều buổi.
 - Sinh đề thi hoặc dự đoán chắc chắn nội dung sẽ thi.
 - Đánh giá học viên đã hiểu bài hay chưa.
-- Trả lời bằng kiến thức Internet hoặc kiến thức ngoài transcript.
+- Tự ý dùng kiến thức Internet để trả lời câu ngoài bài. Nguồn web chỉ được bật
+  chủ động để đối chiếu câu hỏi đã có căn cứ trong bài và phải có URL từ grounding metadata.
 - Tự gọi AI ngay khi người dùng nhập bài học hoặc nhập API key.
 
 ---
@@ -69,7 +70,8 @@ Giải pháp trung tâm của đề tài là tạo một **bản đồ đọc ư
 
 Hệ thống được thiết kế theo năm nguyên tắc:
 
-1. **Transcript là nguồn sự thật duy nhất:** mọi kết luận chuyên môn phải bắt nguồn từ transcript đang mở.
+1. **Bài học là nguồn sự thật chính:** mọi kết luận cốt lõi phải bắt nguồn từ
+   transcript/tài liệu đang mở; nguồn web chỉ là lớp đối chiếu tùy chọn và được gắn nhãn riêng.
 2. **AI chỉ hỗ trợ quyết định:** người học vẫn được xem nguồn, hỏi lại và tự đưa ra quyết định cuối cùng.
 3. **Context càng hẹp càng tốt:** câu hỏi thông thường chỉ gửi các đoạn liên quan tới AI, giúp giảm nhiễu và giảm trả lời lan man.
 4. **Structured output và hậu kiểm:** không hiển thị trực tiếp văn bản tự do từ mô hình; kết quả phải đúng schema và vượt qua kiểm tra bằng code.
@@ -118,7 +120,7 @@ Trong tài liệu nghiệp vụ, Q&A dùng tên trường `tim_thay`, `tra_loi`,
 | Mini-chat hỏi tiếp tại cùng đoạn | Đã triển khai |
 | Pool nhiều Gemini API key và tự chuyển key | Đã triển khai |
 | Mã hóa API key trên Windows | Đã triển khai |
-| Unit test deterministic | 32/32 test đạt |
+| Unit test deterministic | 47/47 test đạt |
 | Golden set 20 tình huống | Đã xây dựng bộ ca kiểm thử |
 | Chấm tự động toàn bộ golden set bằng AI thật | Cần hoàn thiện |
 | Đăng nhập, phân quyền và dữ liệu riêng từng người | Chưa triển khai |
@@ -902,7 +904,9 @@ Giao diện gồm:
 **Hỏi taphoammo AI**
 
 - Câu hỏi gợi ý.
-- Chat có citation.
+- Chat có tên bài/tài liệu, mã đoạn và trích đoạn thật do backend lấy từ nguồn.
+- Câu ngoài bài hỏi người dùng có chọn nhầm bài; nội dung gây hại hoặc prompt injection bị từ chối.
+- Có tùy chọn đối chiếu web; chỉ URL từ grounding metadata mới được hiển thị như nguồn.
 - Badge slot key đã sử dụng.
 - Lịch sử cuộn độc lập.
 

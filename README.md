@@ -70,16 +70,25 @@ Pool sử dụng round-robin sau mỗi request. Việc dán/nạp key **không t
 
 Tab **Hỏi taphoammo AI** dùng chat input native: lời chào/cảm ơn được phản hồi ngay mà
 không tiêu key; câu hỏi tổng quan như “Tóm tắt buổi học này” và câu hỏi khái niệm
-được taphoammo AI trả lời từ transcript đang mở, kèm citation thật. Nếu provider lỗi, UI
-hiển thị thông báo an toàn trong hội thoại thay vì làm hỏng toàn bộ trang. Lịch sử
-chat tự giới hạn ở 420 px và cuộn riêng khi dài; ô nhập luôn nằm ngay bên dưới.
+được taphoammo AI trả lời từ transcript đang mở. Mỗi câu trả lời grounded hiển thị
+**tên bài/tài liệu, mã đoạn và trích đoạn thật do backend lấy từ nguồn**; model không
+được tự viết phần bằng chứng. Nếu provider lỗi, UI hiển thị thông báo an toàn trong
+hội thoại thay vì làm hỏng toàn bộ trang. Lịch sử chat tự giới hạn ở 420 px và cuộn
+riêng khi dài; ô nhập luôn nằm ngay bên dưới.
 
 Pipeline trả lời được tối ưu cho độ chính xác và súc tích: tìm đoạn theo từ khoá có
 dấu/không dấu, cụm từ và độ đặc hiệu; bỏ hoạt động lớp khỏi kết quả tìm kiếm; dùng
 Gemini thinking budget với độ ngẫu nhiên thấp; ép structured JSON theo schema; rồi
 hậu kiểm `supported`, citation, nội dung lặp và giới hạn độ dài trước khi hiển thị.
-AI phải trả lời thẳng, không mở bài/kết bài, không tự tạo ví dụ; thiếu căn cứ thì từ
-chối thay vì suy đoán.
+AI phải trả lời thẳng, không mở bài/kết bài, không tự tạo ví dụ. Câu ngoài bài hỏi
+lại người dùng có chọn nhầm bài hay không; yêu cầu gây hại hoặc prompt injection bị
+từ chối trước khi tiêu API key. Mini-chat áp dụng cùng guardrail.
+
+Tuỳ chọn **Bổ sung nguồn web** chỉ chạy sau khi câu hỏi đã có căn cứ trong bài học.
+Google Search là phần đối chiếu bổ sung, không dùng để trả lời câu lạc đề. UI chỉ
+hiển thị URL do grounding metadata của provider trả về; URL do model tự viết không
+được coi là nguồn. Lỗi hoặc quota của bước web không làm mất câu trả lời đã grounded
+từ bài học.
 
 Trong tab **Transcript** và vùng **Kiểm chứng nguồn**, người dùng có thể bôi đen một
 phần trong cùng một đoạn rồi chọn **Giải thích bằng taphoammo AI**. Hệ thống xác minh phần chọn

@@ -168,6 +168,24 @@ _CSS = """
   font-size: .75rem;
   margin: 0 .15rem;
 }
+.catchup-selection-source {
+  background: color-mix(in srgb, var(--st-primary-color) 3%, var(--st-background-color));
+  border: 1px solid var(--st-border-color);
+  border-radius: var(--st-border-radius);
+  color: var(--st-text-color);
+  font-size: .78rem;
+  padding: .5rem .65rem;
+}
+.catchup-selection-source summary {
+  color: var(--st-primary-color);
+  cursor: pointer;
+  font-weight: 700;
+}
+.catchup-selection-source p {
+  line-height: 1.48;
+  margin: .55rem 0 0;
+  white-space: pre-wrap;
+}
 .catchup-selection-pending {
   align-items: center;
   color: var(--st-primary-color);
@@ -316,14 +334,33 @@ export default function(component) {
         if (turn.mode === "error") answer.classList.add("is-error")
         answer.textContent = String(turn.answer ?? "")
 
-        const meta = document.createElement("p")
-        meta.className = "catchup-selection-meta"
         const source = String(turn.segment_id ?? item.id ?? "")
         const provider = turn.mode === "ai" ? "taphoammo AI" : "Trích xuất từ transcript"
         const slot = Number.isInteger(turn.slot) ? ` · key slot ${turn.slot + 1}` : ""
-        meta.textContent = `Nguồn [${source}] · ${provider}${slot}`
+        const sources = Array.isArray(turn.sources) ? turn.sources : []
+        const sourceInfo = sources.find(entry => entry?.type === "lesson") ?? sources[0]
 
-        turnElement.append(question, answer, meta)
+        turnElement.append(question, answer)
+        if (sourceInfo) {
+          const meta = document.createElement("p")
+          meta.className = "catchup-selection-meta"
+          const sourceTitle = String(sourceInfo.title ?? "Nguồn bài học")
+          const sourceId = String(sourceInfo.id ?? source)
+          meta.textContent = `Nguồn: ${sourceTitle} · [${sourceId}] · ${provider}${slot}`
+          turnElement.appendChild(meta)
+
+          const excerpt = String(sourceInfo.excerpt ?? "").trim()
+          if (excerpt) {
+            const sourceDetails = document.createElement("details")
+            sourceDetails.className = "catchup-selection-source"
+            const sourceSummary = document.createElement("summary")
+            sourceSummary.textContent = "Xem trích đoạn làm căn cứ"
+            const sourceExcerpt = document.createElement("p")
+            sourceExcerpt.textContent = excerpt
+            sourceDetails.append(sourceSummary, sourceExcerpt)
+            turnElement.appendChild(sourceDetails)
+          }
+        }
         history.appendChild(turnElement)
       }
 
